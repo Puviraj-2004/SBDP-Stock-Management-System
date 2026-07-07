@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TripStatus {
+  loaded
+  closed
+}
+
+enum PaidStatus {
+  unpaid
+  partial
+  paid
+}
+
+enum PaymentMethod {
+  cash
+  bank_transfer
+  cheque
+}
+
+enum ChequeStatus {
+  pending
+  cleared
+}
+
+model Supplier {
+  id          String        @id @default(uuid())
+  name        String
+  contactInfo String?
+  createdAt   DateTime      @default(now())
+  products    Product[]
+  trips       LoadingTrip[]
+}
+
+model Product {
+  id           String            @id @default(uuid())
+  supplierId   String
+  supplier     Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  name         String
+  measurement  String
+  barcode      String?
+  itemCode     String?
+  sellingPrice Decimal           @db.Decimal(12, 2)
+  createdAt    DateTime          @default(now())
+  batches      ProductBatch[]
+  invoiceItems InvoiceItem[]
+
+  @@unique([name, measurement, supplierId])
+  @@index([barcode, supplierId])
+  @@index([itemCode, supplierId])
+}
+
+model ProductBatch {
+  id             String            @id @default(uuid())
+  productId      String
+  product        Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity       Int
+  expiryDate     DateTime          @db.Date
+  receivedDate   DateTime          @db.Date
+  alertSent      Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  tripItems      LoadingTripItem[]
+
+  @@index([productId, expiryDate])
+}
+
+model Vehicle {
+  id           String        @id @default(uuid())
+  nameOrNumber String        @unique
+  createdAt    DateTime      @default(now())
+  trips        LoadingTrip[]
+}
+
+model Shop {
+  id            String    @id @default(uuid())
+  name          String
+  address       String?
+  contactNumber String?
+  createdAt     DateTime  @default(now())
+  invoices      Invoice[]
+  payments      Payment[]
+}
+
+model LoadingTrip {
+  id         String            @id @default(uuid())
+  vehicleId  String
+  vehicle    Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  supplierId String?
+  supplier   Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  tripDate   DateTime          @default(now()) @db.Date
+  status     TripStatus        @default(loaded)
+  createdAt  DateTime          @default(now())
+  closedAt   DateTime?
+  items      LoadingTripItem[]
+  invoices   Invoice[]
+
+  @@index([tripDate, status])
+}
+
+model LoadingTripItem {
+  id               String       @id @default(uuid())
+  tripId           String
+  trip             LoadingTrip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  batchId          String
+  batch            ProductBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  quantityLoaded   Int
+  quantityReturned Int?
+
+  @@index([tripId])
+  @@index([batchId])
+}
+
+model Invoice {
+  id          String        @id @default(uuid())
+  shopId      String
+  shop        Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  tripId      String?
+  trip        LoadingTrip?  @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  invoiceDate DateTime      @default(now()) @db.Date
+  totalAmount Decimal       @default(0) @db.Decimal(12, 2)
+  paidStatus  PaidStatus    @default(unpaid)
+  createdAt   DateTime      @default(now())
+  items       InvoiceItem[]
+  payments    Payment[]
+  allocations PaymentAllocation[]
+
+  @@index([shopId, invoiceDate])
+  @@index([tripId])
+}
+
+model InvoiceItem {
+  id        String   @id @default(uuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity  Int
+  unitPrice Decimal  @db.Decimal(12, 2)
+  lineTotal Decimal  @db.Decimal(12, 2)
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  shopId        String
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  invoiceId     String?
+  invoice       Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  paymentDate   DateTime      @default(now()) @db.Date
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod
+  chequeNumber  String?
+  chequeStatus  ChequeStatus?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  allocations   PaymentAllocation[]
+
+  @@index([shopId, paymentDate])
+  @@index([invoiceId])
+}
+
+model PaymentAllocation {
+  id        String   @id @default(uuid())
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([invoiceId])
+}
+
+model Owner {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+}
