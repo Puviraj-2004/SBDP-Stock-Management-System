@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: "Internal stock, trip, invoice, and payment management"
 };
 
+export const preferredRegion = "sin1";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">

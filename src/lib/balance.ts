@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import type { PaymentMethod, ChequeStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
@@ -14,6 +15,14 @@ export function paymentCountsTowardBalance(payment: Pick<LedgerPayment, "method"
     (payment.method === "cheque" && payment.chequeStatus === "cleared")
   );
 }
+
+export const countedPaymentWhere = {
+  OR: [
+    { method: "cash" },
+    { method: "bank_transfer" },
+    { method: "cheque", chequeStatus: "cleared" }
+  ]
+} satisfies Prisma.PaymentWhereInput;
 
 export function calculateOutstandingBalance(
   invoiceTotals: unknown[],
@@ -40,6 +49,38 @@ export async function getShopOutstandingBalance(shopId: string) {
     invoiceTotals.map((invoice) => invoice.totalAmount),
     payments
   );
+}
+
+export async function getOutstandingBalancesByShop(shopIds: string[]) {
+  if (shopIds.length === 0) return new Map<string, number>();
+
+  const [invoiceTotals, paymentTotals] = await Promise.all([
+    prisma.invoice.groupBy({
+      by: ["shopId"],
+      where: { shopId: { in: shopIds } },
+      _sum: { totalAmount: true }
+    }),
+    prisma.payment.groupBy({
+      by: ["shopId"],
+      where: {
+        shopId: { in: shopIds },
+        ...countedPaymentWhere
+      },
+      _sum: { amount: true }
+    })
+  ]);
+
+  const balances = new Map(shopIds.map((shopId) => [shopId, 0]));
+
+  for (const row of invoiceTotals) {
+    balances.set(row.shopId, (balances.get(row.shopId) ?? 0) + Number(row._sum.totalAmount ?? 0));
+  }
+
+  for (const row of paymentTotals) {
+    balances.set(row.shopId, (balances.get(row.shopId) ?? 0) - Number(row._sum.amount ?? 0));
+  }
+
+  return balances;
 }
 
 export async function getInvoicePaidAmount(invoiceId: string) {

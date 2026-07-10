@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { dateInputToDate, displayDate, startOfToday, toDateInputValue } from "@/lib/dates";
-import { paymentCountsTowardBalance } from "@/lib/balance";
+import { countedPaymentWhere, paymentCountsTowardBalance } from "@/lib/balance";
 
 export function dateRangeFromInput(value?: string) {
   const selected = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : toDateInputValue(startOfToday());
@@ -19,7 +19,7 @@ export async function getDailyProgress(date?: string) {
   const overdueCutoff = new Date(selectedDate);
   overdueCutoff.setUTCDate(overdueCutoff.getUTCDate() - 30);
 
-  const [trips, invoices, payments, stockReceived, nearExpiryBatches, openTrips, pendingCheques, partialInvoices, overdueInvoices, shopsToday, allInvoices, allPayments] = await Promise.all([
+  const [trips, invoices, payments, stockReceived, nearExpiryBatches, openTrips, pendingCheques, partialInvoices, overdueInvoices, shopsToday, allInvoiceTotal, allCountedPaymentTotal] = await Promise.all([
     prisma.loadingTrip.findMany({
       where: { tripDate: { gte: start, lt: end } },
       include: {
@@ -90,8 +90,8 @@ export async function getDailyProgress(date?: string) {
       orderBy: { createdAt: "asc" },
       take: 20
     }),
-    prisma.invoice.findMany({ select: { totalAmount: true } }),
-    prisma.payment.findMany({ select: { amount: true, method: true, chequeStatus: true } })
+    prisma.invoice.aggregate({ _sum: { totalAmount: true } }),
+    prisma.payment.aggregate({ where: countedPaymentWhere, _sum: { amount: true } })
   ]);
 
   const tripRows = trips.map((trip) => {
@@ -136,10 +136,9 @@ export async function getDailyProgress(date?: string) {
 
   const countedPayments = payments.filter(paymentCountsTowardBalance);
   const todayPendingCheques = payments.filter((payment) => payment.method === "cheque" && payment.chequeStatus === "pending");
-  const allCountedPayments = allPayments.filter(paymentCountsTowardBalance);
   const totalOutstanding =
-    allInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0) -
-    allCountedPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+    Number(allInvoiceTotal._sum.totalAmount ?? 0) -
+    Number(allCountedPaymentTotal._sum.amount ?? 0);
   const tripMismatchAlerts = tripRows.filter((trip) => trip.mismatchCount > 0);
 
   return {

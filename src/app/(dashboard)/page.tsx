@@ -4,13 +4,13 @@ import { Badge, LinkButton, PageHeader, Panel, Table } from "@/components/ui";
 import { ExpiryAlertList } from "@/components/ExpiryAlertList";
 import { DatabaseUsageCard } from "@/components/DatabaseUsageCard";
 import { prisma } from "@/lib/db";
-import { getShopOutstandingBalance, paymentCountsTowardBalance } from "@/lib/balance";
+import { countedPaymentWhere, getOutstandingBalancesByShop } from "@/lib/balance";
 import { getDailyProgress } from "@/lib/dailyReport";
 import { getDatabaseUsage } from "@/lib/databaseUsage";
 import { displayDate, money, startOfToday } from "@/lib/dates";
 
 export default async function DashboardPage() {
-  const [openTrips, shops, todayReport, invoiceTotal, payments, tripCount, shopCount, databaseUsage] = await Promise.all([
+  const [openTrips, shops, todayReport, invoiceTotal, countedPaymentsTotal, tripCount, shopCount, databaseUsage] = await Promise.all([
     prisma.loadingTrip.findMany({
       where: { status: "loaded" },
       include: { vehicle: true, supplier: true, _count: { select: { items: true } } },
@@ -20,20 +20,17 @@ export default async function DashboardPage() {
     prisma.shop.findMany({ orderBy: { name: "asc" }, take: 100 }),
     getDailyProgress(),
     prisma.invoice.aggregate({ _sum: { totalAmount: true }, _count: true }),
-    prisma.payment.findMany({ select: { amount: true, method: true, chequeStatus: true } }),
+    prisma.payment.aggregate({ where: countedPaymentWhere, _sum: { amount: true } }),
     prisma.loadingTrip.count(),
     prisma.shop.count(),
     getDatabaseUsage()
   ]);
 
-  const balances = await Promise.all(
-    shops.map(async (shop) => ({ shop, balance: await getShopOutstandingBalance(shop.id) }))
-  );
+  const balanceMap = await getOutstandingBalancesByShop(shops.map((shop) => shop.id));
+  const balances = shops.map((shop) => ({ shop, balance: balanceMap.get(shop.id) ?? 0 }));
   const highBalances = balances.filter((item) => item.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 8);
   const totalOutstanding = balances.reduce((sum, item) => sum + item.balance, 0);
-  const countedPayments = payments
-    .filter(paymentCountsTowardBalance)
-    .reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const countedPayments = Number(countedPaymentsTotal._sum.amount ?? 0);
 
   return (
     <>
