@@ -1,21 +1,28 @@
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
 import { Edit, Eye, Trash2 } from "lucide-react";
 import { BarcodeScanInput } from "@/components/BarcodeScanInput";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { ExportButton } from "@/components/ExportButton";
+import { PaginationControls } from "@/components/PaginationControls";
 import { LinkButton, PageHeader, Panel, Table } from "@/components/ui";
 import { deleteProductAction, productScanAction } from "@/lib/actions";
 import { prisma } from "@/lib/db";
 import { money } from "@/lib/dates";
+import { DEFAULT_PAGE_SIZE, getPageCount, getPagination, parsePage } from "@/lib/pagination";
+
+type ProductListRow = Prisma.ProductGetPayload<{
+  include: { supplier: true; _count: { select: { invoiceItems: true } } };
+}>;
 
 export default async function ProductsPage({
   searchParams
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
 }) {
-  const { q } = await searchParams;
-  const products = await prisma.product.findMany({
-    where: q
+  const { q, page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
+  const where: Prisma.ProductWhereInput | undefined = q
       ? {
           OR: [
             { name: { contains: q, mode: "insensitive" } },
@@ -23,11 +30,16 @@ export default async function ProductsPage({
             { itemCode: { contains: q, mode: "insensitive" } }
           ]
         }
-      : undefined,
-    include: { supplier: true, _count: { select: { invoiceItems: true } } },
-    orderBy: { name: "asc" },
-    take: 200
-  });
+      : undefined;
+  const [products, totalProducts] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      include: { supplier: true, _count: { select: { invoiceItems: true } } },
+      orderBy: { name: "asc" },
+      ...getPagination(page)
+    }) as Promise<ProductListRow[]>,
+    prisma.product.count({ where })
+  ]);
   const stockTotals = await prisma.productBatch.groupBy({
     by: ["productId"],
     where: { productId: { in: products.map((product) => product.id) } },
@@ -104,6 +116,16 @@ export default async function ProductsPage({
           </tr>
         ))}
       </Table>
+      <div className="mt-4">
+        <PaginationControls
+          pathname="/products"
+          page={page}
+          pageCount={getPageCount(totalProducts)}
+          total={totalProducts}
+          pageSize={DEFAULT_PAGE_SIZE}
+          params={{ q }}
+        />
+      </div>
     </>
   );
 }

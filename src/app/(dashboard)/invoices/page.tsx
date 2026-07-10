@@ -1,15 +1,26 @@
 import { InvoicesTable } from "@/components/InvoicesTable";
 import { ExportButton } from "@/components/ExportButton";
+import { PaginationControls } from "@/components/PaginationControls";
 import { LinkButton, PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { displayDate, money, toDateInputValue } from "@/lib/dates";
+import { DEFAULT_PAGE_SIZE, getPageCount, getPagination, parsePage } from "@/lib/pagination";
 
-export default async function InvoicesPage() {
-  const invoices = await prisma.invoice.findMany({
-    include: { shop: true, trip: { include: { vehicle: true } }, _count: { select: { allocations: true, items: true } } },
-    orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
-    take: 300
-  });
+export default async function InvoicesPage({
+  searchParams
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
+  const [invoices, totalInvoices] = await Promise.all([
+    prisma.invoice.findMany({
+      include: { shop: true, trip: { include: { vehicle: true } }, _count: { select: { allocations: true, items: true } } },
+      orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
+      ...getPagination(page)
+    }),
+    prisma.invoice.count()
+  ]);
 
   return (
     <>
@@ -35,6 +46,15 @@ export default async function InvoicesPage() {
           paidStatus: invoice.paidStatus
         }))}
       />
+      <div className="mt-4">
+        <PaginationControls
+          pathname="/invoices"
+          page={page}
+          pageCount={getPageCount(totalInvoices)}
+          total={totalInvoices}
+          pageSize={DEFAULT_PAGE_SIZE}
+        />
+      </div>
     </>
   );
 }

@@ -1,21 +1,32 @@
 import { StockTable } from "@/components/StockTable";
 import { ExportButton } from "@/components/ExportButton";
+import { PaginationControls } from "@/components/PaginationControls";
 import { LinkButton, PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { inTwoMonths, startOfToday, toDateInputValue } from "@/lib/dates";
+import { DEFAULT_PAGE_SIZE, getPageCount, getPagination, parsePage } from "@/lib/pagination";
 
-export default async function StockPage() {
+export default async function StockPage({
+  searchParams
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = parsePage(pageParam);
   const today = startOfToday();
   const soon = inTwoMonths();
 
-  const batches = await prisma.productBatch.findMany({
-    include: {
-      product: { include: { supplier: true } },
-      _count: { select: { tripItems: true } }
-    },
-    orderBy: [{ expiryDate: "asc" }, { product: { name: "asc" } }],
-    take: 300
-  });
+  const [batches, totalBatches] = await Promise.all([
+    prisma.productBatch.findMany({
+      include: {
+        product: { include: { supplier: true } },
+        _count: { select: { tripItems: true } }
+      },
+      orderBy: [{ expiryDate: "asc" }, { product: { name: "asc" } }],
+      ...getPagination(page)
+    }),
+    prisma.productBatch.count()
+  ]);
 
   const totalUnits = batches.reduce((sum, batch) => sum + batch.quantity, 0);
   const rows = batches.map((batch) => ({
@@ -44,6 +55,15 @@ export default async function StockPage() {
         }
       />
       <StockTable rows={rows} today={toDateInputValue(today)} soon={toDateInputValue(soon)} />
+      <div className="mt-4">
+        <PaginationControls
+          pathname="/stock"
+          page={page}
+          pageCount={getPageCount(totalBatches)}
+          total={totalBatches}
+          pageSize={DEFAULT_PAGE_SIZE}
+        />
+      </div>
     </>
   );
 }
