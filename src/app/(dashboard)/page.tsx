@@ -2,13 +2,15 @@ import Link from "next/link";
 import { Eye } from "lucide-react";
 import { Badge, LinkButton, PageHeader, Panel, Table } from "@/components/ui";
 import { ExpiryAlertList } from "@/components/ExpiryAlertList";
+import { DatabaseUsageCard } from "@/components/DatabaseUsageCard";
 import { prisma } from "@/lib/db";
 import { getShopOutstandingBalance, paymentCountsTowardBalance } from "@/lib/balance";
 import { getDailyProgress } from "@/lib/dailyReport";
+import { getDatabaseUsage } from "@/lib/databaseUsage";
 import { displayDate, money, startOfToday } from "@/lib/dates";
 
 export default async function DashboardPage() {
-  const [openTrips, shops, todayReport, invoiceTotal, payments, tripCount, shopCount] = await Promise.all([
+  const [openTrips, shops, todayReport, invoiceTotal, payments, tripCount, shopCount, databaseUsage] = await Promise.all([
     prisma.loadingTrip.findMany({
       where: { status: "loaded" },
       include: { vehicle: true, supplier: true, _count: { select: { items: true } } },
@@ -20,7 +22,8 @@ export default async function DashboardPage() {
     prisma.invoice.aggregate({ _sum: { totalAmount: true }, _count: true }),
     prisma.payment.findMany({ select: { amount: true, method: true, chequeStatus: true } }),
     prisma.loadingTrip.count(),
-    prisma.shop.count()
+    prisma.shop.count(),
+    getDatabaseUsage()
   ]);
 
   const balances = await Promise.all(
@@ -49,7 +52,7 @@ export default async function DashboardPage() {
           <LinkButton href="/shops" variant="secondary">Shop payments</LinkButton>
         </div>
       </Panel>
-      <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <Panel>
           <h2 className="text-sm font-medium text-muted">Overall invoices</h2>
           <div className="mt-2 text-2xl font-semibold tabular">{money(invoiceTotal._sum.totalAmount ?? 0)}</div>
@@ -70,6 +73,7 @@ export default async function DashboardPage() {
           <div className="mt-2 text-2xl font-semibold tabular">{shopCount}</div>
           <div className="mt-1 text-xs text-muted">Outstanding {money(totalOutstanding)}</div>
         </Panel>
+        <DatabaseUsageCard usage={databaseUsage} />
       </div>
       <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Panel>
