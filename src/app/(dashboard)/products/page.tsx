@@ -24,10 +24,20 @@ export default async function ProductsPage({
           ]
         }
       : undefined,
-    include: { supplier: true, batches: true, _count: { select: { invoiceItems: true } } },
+    include: { supplier: true, _count: { select: { invoiceItems: true } } },
     orderBy: { name: "asc" },
     take: 200
   });
+  const stockTotals = await prisma.productBatch.groupBy({
+    by: ["productId"],
+    where: { productId: { in: products.map((product) => product.id) } },
+    _sum: { quantity: true }
+  });
+  const stockByProductId = new Map(stockTotals.map((row) => [row.productId, row._sum.quantity ?? 0]));
+  const productRows = products.map((product) => ({
+    ...product,
+    stockQuantity: stockByProductId.get(product.id) ?? 0
+  }));
 
   return (
     <>
@@ -47,7 +57,7 @@ export default async function ProductsPage({
         </form>
       </Panel>
       <Table headers={["Product", "Supplier", "Barcode", "Item code", "Price", "Stock", "Actions"]}>
-        {products.map((product) => (
+        {productRows.map((product) => (
           <tr key={product.id}>
             <td className="px-3 py-2">
               <span className="font-medium">{product.name} {product.measurement}</span>
@@ -56,7 +66,7 @@ export default async function ProductsPage({
             <td className="px-3 py-2 tabular">{product.barcode ?? "-"}</td>
             <td className="px-3 py-2 tabular">{product.itemCode ?? "-"}</td>
             <td className="px-3 py-2 tabular">{money(product.sellingPrice)}</td>
-            <td className="px-3 py-2 tabular">{product.batches.reduce((sum, batch) => sum + batch.quantity, 0)}</td>
+            <td className="px-3 py-2 tabular">{product.stockQuantity}</td>
             <td className="px-3 py-2">
               <div className="flex items-center gap-2">
                 <Link
@@ -75,7 +85,7 @@ export default async function ProductsPage({
                 >
                   <Edit size={15} />
                 </Link>
-                {product.batches.length === 0 && product._count.invoiceItems === 0 ? (
+                {product.stockQuantity === 0 && product._count.invoiceItems === 0 ? (
                   <form action={deleteProductAction}>
                     <input type="hidden" name="id" value={product.id} />
                     <ConfirmSubmitButton
