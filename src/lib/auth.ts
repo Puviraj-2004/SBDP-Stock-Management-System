@@ -39,6 +39,13 @@ export async function logout() {
 }
 
 export async function getSessionOwner() {
+  const ownerId = await getSessionOwnerId();
+  if (!ownerId) return null;
+
+  return prisma.owner.findUnique({ where: { id: ownerId }, select: { id: true, username: true } });
+}
+
+export async function getSessionOwnerId() {
   const value = (await cookies()).get(cookieName)?.value;
   if (!value) return null;
 
@@ -54,5 +61,5 @@ export async function getSessionOwner() {
     return null;
   }
 
-  return prisma.owner.findUnique({ where: { id: parts[0] }, select: { id: true, username: true } });
+  return parts[0];
 }

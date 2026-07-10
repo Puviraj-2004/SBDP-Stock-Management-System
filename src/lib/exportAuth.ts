@@ -1,8 +1,8 @@
-import { getSessionOwner } from "@/lib/auth";
+import { getSessionOwnerId } from "@/lib/auth";
 
 export async function requireExportOwner() {
-  const owner = await getSessionOwner();
-  if (!owner) {
+  const ownerId = await getSessionOwnerId();
+  if (!ownerId) {
     return new Response("Unauthorized", { status: 401 });
   }
   return null;

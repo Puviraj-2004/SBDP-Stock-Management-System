@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { loginAction } from "@/lib/actions";
-import { getSessionOwner } from "@/lib/auth";
+import { getSessionOwnerId } from "@/lib/auth";
 import { Button, Field, Input, Panel } from "@/components/ui";
 import { PasswordInput } from "@/components/PasswordInput";
 
@@ -9,8 +9,8 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const owner = await getSessionOwner();
-  if (owner) redirect("/");
+  const ownerId = await getSessionOwnerId();
+  if (ownerId) redirect("/");
   const params = await searchParams;
 
   return (
