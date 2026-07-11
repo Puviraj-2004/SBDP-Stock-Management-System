@@ -50,6 +50,7 @@ export default async function ShopDetailPage({ params }: { params: Promise<{ id:
         action={
           <div className="flex flex-wrap gap-2">
             <ExportButton href={`/api/exports/shops/${shop.id}`}>Export Statement</ExportButton>
+            <LinkButton href={`/invoices/old?shopId=${shop.id}`} variant="secondary">Add old invoice</LinkButton>
             <LinkButton href={`/shops/${shop.id}/edit`} variant="secondary">Edit shop</LinkButton>
           </div>
         }
@@ -73,7 +74,10 @@ export default async function ShopDetailPage({ params }: { params: Promise<{ id:
             {shop.invoices.map((invoice) => (
               <tr key={invoice.id}>
                 <td className="px-3 py-2 tabular">{displayDate(invoice.invoiceDate)}</td>
-                <td className="px-3 py-2 tabular">{money(invoice.totalAmount)}</td>
+                <td className="px-3 py-2 tabular">
+                  <div>{money(invoice.totalAmount)}</div>
+                  {invoice.invoiceType === "opening" ? <div className="text-xs text-muted">Old invoice{invoice.referenceNumber ? ` - ${invoice.referenceNumber}` : ""}</div> : null}
+                </td>
                 <td className="px-3 py-2"><Badge tone={invoice.paidStatus === "paid" ? "green" : invoice.paidStatus === "partial" ? "amber" : "red"}>{invoice.paidStatus}</Badge></td>
                 <td className="px-3 py-2">
                   <Link href={`/invoices/${invoice.id}`} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-line bg-white text-ink hover:bg-[#eeebe4]" title="View invoice" aria-label="View invoice">

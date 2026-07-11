@@ -30,6 +30,7 @@ export default async function InvoicesPage({
         action={
           <div className="flex flex-wrap gap-2">
             <ExportButton href="/api/exports/invoices">Export Excel</ExportButton>
+            <LinkButton href="/invoices/old" variant="secondary">Add old invoice</LinkButton>
             <LinkButton href="/invoices/new">Create invoice</LinkButton>
           </div>
         }
@@ -39,7 +40,13 @@ export default async function InvoicesPage({
           id: invoice.id,
           date: toDateInputValue(invoice.invoiceDate),
           shopName: invoice.shop.name,
-          tripLabel: invoice.trip ? `${displayDate(invoice.trip.tripDate)} - ${invoice.trip.vehicle.nameOrNumber}` : "-",
+          invoiceType: invoice.invoiceType,
+          referenceNumber: invoice.referenceNumber,
+          tripLabel: invoice.invoiceType === "opening"
+            ? "Old invoice"
+            : invoice.trip
+              ? `${displayDate(invoice.trip.tripDate)} - ${invoice.trip.vehicle.nameOrNumber}`
+              : "-",
           itemCount: invoice._count.items,
           amountLabel: money(invoice.totalAmount),
           allocationCount: invoice._count.allocations,

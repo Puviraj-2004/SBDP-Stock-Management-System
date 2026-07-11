@@ -23,6 +23,18 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     })
   ]);
   if (!invoice) notFound();
+  if (invoice.invoiceType === "opening") {
+    return (
+      <>
+        <PageHeader title="Edit old invoice" description={`${invoice.shop.name} - ${money(invoice.totalAmount)}`} />
+        <Panel>
+          <p className="text-sm text-muted">
+            Old invoices are amount-only opening bills. Delete and re-enter the old invoice if this was a data entry mistake.
+          </p>
+        </Panel>
+      </>
+    );
+  }
 
   return (
     <>

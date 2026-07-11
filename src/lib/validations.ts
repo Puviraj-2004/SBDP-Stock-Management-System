@@ -74,6 +74,23 @@ export const invoiceSchema = z.object({
   ).min(1)
 });
 
+export const openingInvoiceSchema = z.object({
+  shopId: z.string().min(1),
+  invoiceDate: dateText,
+  referenceNumber: optionalText,
+  notes: optionalText,
+  totalAmount: money,
+  alreadyPaidAmount: z.coerce.number().min(0).optional().default(0)
+}).superRefine((value, ctx) => {
+  if (value.alreadyPaidAmount >= value.totalAmount) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["alreadyPaidAmount"],
+      message: "Already paid amount must be less than the old invoice amount"
+    });
+  }
+});
+
 export const paymentSchema = z.object({
   shopId: z.string().min(1),
   invoiceId: optionalText,

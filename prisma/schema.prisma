@@ -18,6 +18,11 @@ enum PaidStatus {
   paid
 }
 
+enum InvoiceType {
+  sale
+  opening
+}
+
 enum PaymentMethod {
   cash
   bank_transfer
@@ -122,6 +127,9 @@ model Invoice {
   shop        Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
   tripId      String?
   trip        LoadingTrip?  @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  invoiceType InvoiceType   @default(sale)
+  referenceNumber String?
+  notes       String?
   invoiceDate DateTime      @default(now()) @db.Date
   totalAmount Decimal       @default(0) @db.Decimal(12, 2)
   paidStatus  PaidStatus    @default(unpaid)
@@ -132,6 +140,7 @@ model Invoice {
 
   @@index([shopId, invoiceDate])
   @@index([tripId])
+  @@index([invoiceType])
 }
 
 model InvoiceItem {

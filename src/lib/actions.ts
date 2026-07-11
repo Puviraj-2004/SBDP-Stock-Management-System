@@ -11,6 +11,7 @@ import { dateInputToDate, startOfToday } from "@/lib/dates";
 import {
   batchSchema,
   invoiceSchema,
+  openingInvoiceSchema,
   paymentSchema,
   productSchema,
   shopSchema,
@@ -575,6 +576,51 @@ export async function createInvoiceAction(formData: FormData) {
     }
   });
 
+  redirect(`/invoices/${invoice.id}`);
+}
+
+export async function createOpeningInvoiceAction(formData: FormData) {
+  const data = openingInvoiceSchema.parse(Object.fromEntries(formData));
+
+  const invoice = await prisma.$transaction(async (tx) => {
+    const createdInvoice = await tx.invoice.create({
+      data: {
+        shopId: data.shopId,
+        invoiceType: "opening",
+        referenceNumber: data.referenceNumber,
+        notes: data.notes,
+        invoiceDate: dateInputToDate(data.invoiceDate),
+        totalAmount: new Prisma.Decimal(data.totalAmount),
+        paidStatus: data.alreadyPaidAmount > 0 ? "partial" : "unpaid"
+      }
+    });
+
+    if (data.alreadyPaidAmount > 0) {
+      const payment = await tx.payment.create({
+        data: {
+          shopId: data.shopId,
+          invoiceId: createdInvoice.id,
+          paymentDate: dateInputToDate(data.invoiceDate),
+          amount: new Prisma.Decimal(data.alreadyPaidAmount),
+          method: "cash",
+          notes: "Opening paid amount"
+        }
+      });
+
+      await tx.paymentAllocation.create({
+        data: {
+          paymentId: payment.id,
+          invoiceId: createdInvoice.id,
+          amount: new Prisma.Decimal(data.alreadyPaidAmount)
+        }
+      });
+    }
+
+    return createdInvoice;
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath(`/shops/${data.shopId}`);
   redirect(`/invoices/${invoice.id}`);
 }
 

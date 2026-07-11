@@ -12,6 +12,8 @@ type InvoiceRow = {
   id: string;
   date: string;
   shopName: string;
+  invoiceType: "sale" | "opening";
+  referenceNumber: string | null;
   tripLabel: string;
   itemCount: number;
   amountLabel: string;
@@ -34,7 +36,9 @@ export function InvoicesTable({ rows }: { rows: InvoiceRow[] }) {
       if (tripState === "not_linked" && row.tripLabel !== "-") return false;
       if (!normalized) return true;
 
-      return [row.shopName, row.tripLabel, row.amountLabel].some((value) => value.toLowerCase().includes(normalized));
+      return [row.shopName, row.tripLabel, row.referenceNumber, row.amountLabel]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(normalized));
     });
   }, [date, query, rows, status, tripState]);
 
@@ -56,12 +60,17 @@ export function InvoicesTable({ rows }: { rows: InvoiceRow[] }) {
         </Select>
       </div>
 
-      <Table headers={["Date", "Shop", "Trip", "Items", "Amount", "Payments", "Status", "Actions"]}>
+      <Table headers={["Date", "Shop", "Source", "Items", "Amount", "Payments", "Status", "Actions"]}>
         {filteredRows.map((invoice) => (
           <tr key={invoice.id}>
             <td className="px-3 py-2 tabular">{displayDate(invoice.date)}</td>
             <td className="px-3 py-2">{invoice.shopName}</td>
-            <td className="px-3 py-2">{invoice.tripLabel}</td>
+            <td className="px-3 py-2">
+              <div>{invoice.tripLabel}</div>
+              {invoice.invoiceType === "opening" && invoice.referenceNumber ? (
+                <div className="text-xs text-muted">{invoice.referenceNumber}</div>
+              ) : null}
+            </td>
             <td className="px-3 py-2 tabular">{invoice.itemCount}</td>
             <td className="px-3 py-2 tabular">{invoice.amountLabel}</td>
             <td className="px-3 py-2 tabular">{invoice.allocationCount}</td>
@@ -73,7 +82,7 @@ export function InvoicesTable({ rows }: { rows: InvoiceRow[] }) {
                 <Link href={`/invoices/${invoice.id}`} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-line bg-white text-ink hover:bg-[#eeebe4]" title="View invoice" aria-label="View invoice">
                   <Eye size={15} />
                 </Link>
-                {invoice.allocationCount === 0 ? (
+                {invoice.invoiceType === "sale" && invoice.allocationCount === 0 ? (
                   <Link href={`/invoices/${invoice.id}/edit`} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-line bg-white text-ink hover:bg-[#eeebe4]" title="Edit invoice" aria-label="Edit invoice">
                     <Edit size={15} />
                   </Link>
