@@ -56,11 +56,8 @@ button {
 }
 
 .report-date-bar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 36px auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   height: 48px;
@@ -105,11 +102,11 @@ button {
 }
 
 .report-month-bar {
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .report-day-bar {
-  grid-template-columns: auto auto 36px minmax(0, 1fr) 36px auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .report-tab-link {
@@ -439,7 +436,7 @@ button {
   }
 
   .report-date-bar {
-    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    grid-template-columns: 1fr;
     height: auto;
     min-height: 48px;
     padding-bottom: 8px;
@@ -456,12 +453,12 @@ button {
   }
 
   .report-month-bar {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .report-day-bar,
   .report-month-bar {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .report-day-bar .report-date-arrow {

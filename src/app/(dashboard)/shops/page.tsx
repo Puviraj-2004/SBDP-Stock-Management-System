@@ -1,6 +1,7 @@
 import { ShopsTable } from "@/components/ShopsTable";
 import { PaginationControls } from "@/components/PaginationControls";
-import { LinkButton, PageHeader } from "@/components/ui";
+import { ShopCreateDialog } from "@/components/ShopCreateDialog";
+import { PageHeader } from "@/components/ui";
 import { getOutstandingBalancesByShop } from "@/lib/balance";
 import { prisma } from "@/lib/db";
 import { money } from "@/lib/dates";
@@ -38,7 +39,7 @@ export default async function ShopsPage({
 
   return (
     <>
-      <PageHeader title="Shops" description="Shops are selected from this permanent list when billing." action={<LinkButton href="/shops/new">Add shop</LinkButton>} />
+      <PageHeader title="Shops" description="Shops are selected from this permanent list when billing." action={<ShopCreateDialog />} />
       <ShopsTable rows={rows} />
       <div className="mt-4">
         <PaginationControls

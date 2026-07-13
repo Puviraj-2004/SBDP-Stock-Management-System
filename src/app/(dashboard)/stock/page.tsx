@@ -3,8 +3,11 @@ import { ExportButton } from "@/components/ExportButton";
 import { PaginationControls } from "@/components/PaginationControls";
 import { LinkButton, PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { inTwoMonths, startOfToday, toDateInputValue } from "@/lib/dates";
+import { inTwoMonths, money, startOfToday, toDateInputValue } from "@/lib/dates";
 import { DEFAULT_PAGE_SIZE, getPageCount, getPagination, parsePage } from "@/lib/pagination";
+import { getWarehouseBalancesByBatchIds } from "@/lib/stockLedger";
+
+const allPostedMovementsDate = new Date(Date.UTC(9999, 11, 31));
 
 export default async function StockPage({
   searchParams
@@ -20,7 +23,7 @@ export default async function StockPage({
     prisma.productBatch.findMany({
       include: {
         product: { include: { supplier: true } },
-        _count: { select: { tripItems: true } }
+        _count: { select: { loadItems: true, returnItems: true, invoiceItems: true, ledgerEntries: true } }
       },
       orderBy: [{ expiryDate: "asc" }, { product: { name: "asc" } }],
       ...getPagination(page)
@@ -28,7 +31,8 @@ export default async function StockPage({
     prisma.productBatch.count()
   ]);
 
-  const totalUnits = batches.reduce((sum, batch) => sum + batch.quantity, 0);
+  const warehouseBalances = await getWarehouseBalancesByBatchIds(batches.map((batch) => batch.id), allPostedMovementsDate);
+  const totalUnits = batches.reduce((sum, batch) => sum + (warehouseBalances.get(batch.id) ?? 0), 0);
   const rows = batches.map((batch) => ({
     id: batch.id,
     productName: batch.product.name,
@@ -36,10 +40,12 @@ export default async function StockPage({
     supplierName: batch.product.supplier.name,
     barcode: batch.product.barcode,
     itemCode: batch.product.itemCode,
-    quantity: batch.quantity,
+    receivedQuantity: batch.receivedQuantity,
+    warehouseBalance: warehouseBalances.get(batch.id) ?? 0,
+    costPriceLabel: money(batch.costPrice),
     receivedDate: toDateInputValue(batch.receivedDate),
     expiryDate: toDateInputValue(batch.expiryDate),
-    tripItemCount: batch._count.tripItems
+    movementCount: batch._count.loadItems + batch._count.returnItems + batch._count.invoiceItems + batch._count.ledgerEntries
   }));
 
   return (

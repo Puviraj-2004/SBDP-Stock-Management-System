@@ -15,7 +15,7 @@ export function MonthFilter({ value }: { value: string }) {
       className="report-date-input"
       onChange={(event) => {
         if (event.target.value) {
-          router.push(`/reports/month?month=${event.target.value}`);
+          router.push(`/reports/monthly?month=${event.target.value}`);
         }
       }}
     />

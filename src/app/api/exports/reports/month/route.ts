@@ -14,82 +14,37 @@ export async function GET(request: Request) {
     {
       name: "Summary",
       title: `${report.label} - Monthly Report`,
-      subtitle: "Sales, collections, trips, stock, and outstanding summary",
-      columns: ["Metric", "Value"],
+      subtitle: "Sales, payments, profit, vehicle activity, and monthly comparison",
+      columns: ["Metric", "Value", "Vs Last Month"],
       rows: [
-        ["Month", report.label],
-        ["Sales", money(report.totals.invoiceValue)],
-        ["Collections", money(report.totals.collectionValue)],
-        ["Invoices", report.totals.invoiceCount],
-        ["Payments", report.totals.paymentCount],
-        ["Trips", report.totals.tripCount],
-        ["Shops Billed", report.totals.shopCount],
-        ["Stock Received Units", report.totals.stockReceivedUnits],
-        ["Pending Cheques", money(report.totals.pendingChequeValue)],
-        ["Net Outstanding", money(report.totals.totalOutstanding)]
+        ["Sales Revenue", money(report.totals.sales), `${report.comparisons.sales.toFixed(1)}%`],
+        ["Gross Profit", money(report.totals.profit), `${report.comparisons.profit.toFixed(1)}%`],
+        ["Payments Collected", money(report.totals.paymentsReceived), `${report.comparisons.paymentsReceived.toFixed(1)}%`],
+        ["Outstanding Change", money(report.totals.outstandingChange), `${report.comparisons.outstandingChange.toFixed(1)}%`],
+        ["Units Sold", report.totals.soldUnits, `${report.comparisons.soldUnits.toFixed(1)}%`],
+        ["Units Loaded", report.totals.loadedUnits, `${report.comparisons.loadedUnits.toFixed(1)}%`],
+        ["Units Returned", report.totals.returnedUnits, `${report.comparisons.returnedUnits.toFixed(1)}%`]
       ]
     },
     {
-      name: "Vehicle Performance",
-      title: `${report.label} - Vehicle Performance`,
-      subtitle: "Vehicles ranked by invoice sales from linked trips",
-      columns: ["Rank", "Vehicle", "Trips", "Invoices", "Sales", "Collections", "Loaded", "Returned", "Expected Sold", "Behind Top", "Sales %"],
-      rows: report.vehicleRows.map((vehicle) => [
-        vehicle.rank,
-        vehicle.vehicle,
-        vehicle.trips,
-        vehicle.invoices,
-        vehicle.sales,
-        vehicle.collections,
-        vehicle.loaded,
-        vehicle.returned,
-        vehicle.expectedSold,
-        vehicle.rank === 1 ? 0 : vehicle.differenceFromTop,
-        `${vehicle.salesPercent.toFixed(1)}%`
-      ])
+      name: "Vehicles",
+      columns: ["Vehicle", "Loaded", "Sold", "Returned", "Sell-through %"],
+      rows: report.vehicleRows.map((vehicle) => [vehicle.vehicle, vehicle.loaded, vehicle.sold, vehicle.returned, `${vehicle.sellThrough.toFixed(1)}%`])
     },
     {
       name: "Top Products",
-      title: `${report.label} - Product Sales`,
-      subtitle: "Products sorted by monthly sales value",
-      columns: ["Product", "Supplier", "Qty Sold", "Sales"],
-      rows: report.productRows.map((row) => [row.product, row.supplier, row.quantity, row.value])
+      columns: ["Product", "Supplier", "Units Sold", "Revenue", "Profit"],
+      rows: report.productRows.map((product) => [product.product, product.supplier, product.unitsSold, product.revenue, product.profit])
     },
     {
-      name: "Shop Sales",
-      title: `${report.label} - Shop Sales`,
-      subtitle: "Shops sorted by monthly invoice value",
-      columns: ["Shop", "Invoices", "Sales", "Paid", "Remaining"],
-      rows: report.shopRows.map((shop) => [shop.shop, shop.invoices, shop.value, shop.paid, shop.remaining])
+      name: "Top Shops",
+      columns: ["Shop", "Invoice Total", "Payments Received"],
+      rows: report.shopRows.map((shop) => [shop.shop, shop.invoiceTotal, shop.paymentsReceived])
     },
     {
-      name: "Trips",
-      title: `${report.label} - Trips`,
-      subtitle: "All trips created in the selected month",
-      columns: ["Date", "Vehicle", "Supplier", "Loaded", "Returned", "Expected Sold", "Invoice Value", "Status"],
-      rows: report.trips.map((trip) => [
-        trip.date,
-        trip.vehicle,
-        trip.supplier,
-        trip.loaded,
-        trip.returned,
-        trip.expectedSold,
-        trip.invoiceValue,
-        trip.status
-      ])
-    },
-    {
-      name: "Stock Received",
-      title: `${report.label} - Stock Received`,
-      subtitle: "Batches received in the selected month",
-      columns: ["Received Date", "Product", "Supplier", "Qty", "Expiry"],
-      rows: report.stockReceived.map((batch) => [
-        displayDate(batch.receivedDate),
-        `${batch.product.name} ${batch.product.measurement}`,
-        batch.product.supplier.name,
-        batch.quantity,
-        displayDate(batch.expiryDate)
-      ])
+      name: "Daily Trend",
+      columns: ["Date", "Sales"],
+      rows: report.dailyTrend.map((day) => [displayDate(day.date), day.sales])
     }
   ]);
 }

@@ -5,11 +5,13 @@ import { BarcodeScanInput } from "@/components/BarcodeScanInput";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { ExportButton } from "@/components/ExportButton";
 import { PaginationControls } from "@/components/PaginationControls";
-import { LinkButton, PageHeader, Panel, Table } from "@/components/ui";
+import { ProductCreateDialog } from "@/components/ProductCreateDialog";
+import { PageHeader, Panel, Table } from "@/components/ui";
 import { deleteProductAction, productScanAction } from "@/lib/actions";
 import { prisma } from "@/lib/db";
 import { money } from "@/lib/dates";
 import { DEFAULT_PAGE_SIZE, getPageCount, getPagination, parsePage } from "@/lib/pagination";
+import { getCompanyStockByProductIds } from "@/lib/stockLedger";
 
 type ProductListRow = Prisma.ProductGetPayload<{
   include: { supplier: true; _count: { select: { invoiceItems: true } } };
@@ -31,21 +33,17 @@ export default async function ProductsPage({
           ]
         }
       : undefined;
-  const [products, totalProducts] = await Promise.all([
+  const [products, totalProducts, suppliers] = await Promise.all([
     prisma.product.findMany({
       where,
       include: { supplier: true, _count: { select: { invoiceItems: true } } },
       orderBy: { name: "asc" },
       ...getPagination(page)
     }) as Promise<ProductListRow[]>,
-    prisma.product.count({ where })
+    prisma.product.count({ where }),
+    prisma.supplier.findMany({ orderBy: { name: "asc" } })
   ]);
-  const stockTotals = await prisma.productBatch.groupBy({
-    by: ["productId"],
-    where: { productId: { in: products.map((product) => product.id) } },
-    _sum: { quantity: true }
-  });
-  const stockByProductId = new Map(stockTotals.map((row) => [row.productId, row._sum.quantity ?? 0]));
+  const stockByProductId = await getCompanyStockByProductIds(products.map((product) => product.id));
   const productRows = products.map((product) => ({
     ...product,
     stockQuantity: stockByProductId.get(product.id) ?? 0
@@ -59,7 +57,7 @@ export default async function ProductsPage({
         action={
           <div className="flex flex-wrap gap-2">
             <ExportButton href="/api/exports/products">Export Excel</ExportButton>
-            <LinkButton href="/products/new">Add product</LinkButton>
+            <ProductCreateDialog suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))} />
           </div>
         }
       />
@@ -68,7 +66,7 @@ export default async function ProductsPage({
           <BarcodeScanInput name="q" defaultValue={q} />
         </form>
       </Panel>
-      <Table headers={["Product", "Supplier", "Barcode", "Item code", "Price", "Stock", "Actions"]}>
+      <Table headers={["Product", "Supplier", "Barcode", "Item code", "Selling", "MRP", "Stock", "Actions"]}>
         {productRows.map((product) => (
           <tr key={product.id}>
             <td className="px-3 py-2">
@@ -78,6 +76,7 @@ export default async function ProductsPage({
             <td className="px-3 py-2 tabular">{product.barcode ?? "-"}</td>
             <td className="px-3 py-2 tabular">{product.itemCode ?? "-"}</td>
             <td className="px-3 py-2 tabular">{money(product.sellingPrice)}</td>
+            <td className="px-3 py-2 tabular">{product.mrp ? money(product.mrp) : "-"}</td>
             <td className="px-3 py-2 tabular">{product.stockQuantity}</td>
             <td className="px-3 py-2">
               <div className="flex items-center gap-2">

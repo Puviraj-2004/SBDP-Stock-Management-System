@@ -4,11 +4,10 @@ import { notFound } from "next/navigation";
 import { ExportButton } from "@/components/ExportButton";
 import { Badge, Button, LinkButton, PageHeader, Panel, Table } from "@/components/ui";
 import { ShopBalanceCard } from "@/components/ShopBalanceCard";
-import { ShopPaymentForm } from "@/components/ShopPaymentForm";
 import { clearChequeAction } from "@/lib/actions";
-import { getInvoicePaidAmount, getShopOutstandingBalance } from "@/lib/balance";
+import { getShopOutstandingBalance } from "@/lib/balance";
 import { prisma } from "@/lib/db";
-import { displayDate, money, toDateInputValue } from "@/lib/dates";
+import { displayDate, money } from "@/lib/dates";
 
 export default async function ShopDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -26,21 +25,6 @@ export default async function ShopDetailPage({ params }: { params: Promise<{ id:
   });
   if (!shop) notFound();
   const balance = await getShopOutstandingBalance(shop.id);
-  const invoicePaymentRows = await Promise.all(
-    shop.invoices.map(async (invoice) => {
-      const paid = await getInvoicePaidAmount(invoice.id);
-      const remaining = Math.max(0, Number(invoice.totalAmount) - paid);
-      return {
-        id: invoice.id,
-        date: displayDate(invoice.invoiceDate),
-        amountLabel: money(invoice.totalAmount),
-        remainingLabel: money(remaining),
-        remaining,
-        status: invoice.paidStatus
-      };
-    })
-  );
-  const payableInvoices = invoicePaymentRows.filter((invoice) => invoice.remaining > 0);
 
   return (
     <>
@@ -50,24 +34,13 @@ export default async function ShopDetailPage({ params }: { params: Promise<{ id:
         action={
           <div className="flex flex-wrap gap-2">
             <ExportButton href={`/api/exports/shops/${shop.id}`}>Export Statement</ExportButton>
-            <LinkButton href={`/invoices/old?shopId=${shop.id}`} variant="secondary">Add old invoice</LinkButton>
+            <LinkButton href={`/invoices/new?type=old&shopId=${shop.id}`} variant="secondary">Add old invoice</LinkButton>
             <LinkButton href={`/shops/${shop.id}/edit`} variant="secondary">Edit shop</LinkButton>
           </div>
         }
       />
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-        <div className="grid gap-5">
-          <ShopBalanceCard balance={balance} />
-          <Panel>
-            <h2 className="mb-3 font-semibold">Add payment</h2>
-            <ShopPaymentForm
-              shopId={shop.id}
-              defaultAmount={balance > 0 ? String(balance) : ""}
-              today={toDateInputValue(new Date())}
-              invoices={payableInvoices}
-            />
-          </Panel>
-        </div>
+        <ShopBalanceCard balance={balance} />
         <Panel>
           <h2 className="mb-3 font-semibold">Invoice history</h2>
           <Table headers={["Date", "Amount", "Status", "Action"]}>
@@ -97,13 +70,11 @@ export default async function ShopDetailPage({ params }: { params: Promise<{ id:
               <td className="px-3 py-2 tabular">{displayDate(payment.paymentDate)}</td>
               <td className="px-3 py-2">
                 {payment.allocations.length > 0 ? (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {payment.allocations.map((allocation) => (
-                      <span key={allocation.id} className="inline-flex items-center gap-1">
+                      <span key={allocation.id} className="inline-flex items-center gap-2 rounded-md border border-line bg-white px-2 py-1">
+                        <span className="text-xs text-muted">{displayDate(allocation.invoice.invoiceDate)}</span>
                         <Badge tone="neutral">{money(allocation.amount)}</Badge>
-                        <Link href={`/invoices/${allocation.invoice.id}`} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-line bg-white text-ink hover:bg-[#eeebe4]" title="View invoice" aria-label="View invoice">
-                          <Eye size={15} />
-                        </Link>
                       </span>
                     ))}
                   </div>

@@ -4,6 +4,7 @@ import { deleteSupplierAction } from "@/lib/actions";
 import { LinkButton, PageHeader, Table } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { money } from "@/lib/dates";
+import { getCompanyStockByProductIds } from "@/lib/stockLedger";
 
 export default async function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,6 +13,7 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
     include: { products: { include: { batches: true }, orderBy: { name: "asc" } } }
   });
   if (!supplier) notFound();
+  const stockByProductId = await getCompanyStockByProductIds(supplier.products.map((product) => product.id));
 
   return (
     <>
@@ -30,7 +32,7 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
           </div>
         }
       />
-      <Table headers={["Product", "Measurement", "Barcode", "Item code", "Price", "Stock"]}>
+      <Table headers={["Product", "Measurement", "Barcode", "Item code", "Selling", "MRP", "Stock"]}>
         {supplier.products.map((product) => (
           <tr key={product.id}>
             <td className="px-3 py-2 font-medium">{product.name}</td>
@@ -38,7 +40,8 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
             <td className="px-3 py-2 tabular">{product.barcode ?? "-"}</td>
             <td className="px-3 py-2 tabular">{product.itemCode ?? "-"}</td>
             <td className="px-3 py-2 tabular">{money(product.sellingPrice)}</td>
-            <td className="px-3 py-2 tabular">{product.batches.reduce((sum, batch) => sum + batch.quantity, 0)}</td>
+            <td className="px-3 py-2 tabular">{product.mrp ? money(product.mrp) : "-"}</td>
+            <td className="px-3 py-2 tabular">{stockByProductId.get(product.id) ?? 0}</td>
           </tr>
         ))}
       </Table>

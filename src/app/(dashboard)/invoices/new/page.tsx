@@ -1,47 +1,49 @@
-import { InvoiceBuilderForm } from "@/components/InvoiceBuilderForm";
+import { InvoiceCreateSwitcher } from "@/components/InvoiceCreateSwitcher";
 import { PageHeader, Panel } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { displayDate, money, startOfToday, toDateInputValue } from "@/lib/dates";
+import { dateInputToDate, displayDate, money, startOfToday, toDateInputValue } from "@/lib/dates";
+import { getVehicleStockRows } from "@/lib/stockLedger";
 
-export default async function NewInvoicePage() {
-  const [shops, products, trips] = await Promise.all([
+export default async function NewInvoicePage({
+  searchParams
+}: {
+  searchParams: Promise<{ vehicleId?: string; type?: string; shopId?: string; invoiceDate?: string }>;
+}) {
+  const [{ vehicleId, type, shopId, invoiceDate }, shops, vehicles] = await Promise.all([
+    searchParams,
     prisma.shop.findMany({ orderBy: { name: "asc" } }),
-    prisma.product.findMany({ include: { supplier: true }, orderBy: { name: "asc" } }),
-    prisma.loadingTrip.findMany({
-      where: { status: "closed" },
-      include: {
-        vehicle: true,
-        items: { include: { batch: { select: { productId: true } } } }
-      },
-      orderBy: { tripDate: "desc" },
-      take: 100
-    })
+    prisma.vehicle.findMany({ orderBy: { nameOrNumber: "asc" } })
   ]);
+  const selectedVehicleId = vehicleId || vehicles[0]?.id || "";
+  const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId);
+  const defaultType = type === "old" || type === "opening" ? "opening" : "sale";
+  const today = toDateInputValue(startOfToday());
+  const selectedInvoiceDate = invoiceDate && invoiceDate <= today ? invoiceDate : today;
+  const stockRows = selectedVehicleId ? await getVehicleStockRows(selectedVehicleId, dateInputToDate(selectedInvoiceDate)) : [];
+  const serializedStockRows = stockRows.map(({ expiryDate, sellingPrice, ...row }) => ({
+    ...row,
+    expiryLabel: displayDate(expiryDate),
+    sellingPrice: Number(sellingPrice),
+    priceLabel: money(sellingPrice)
+  }));
 
   return (
     <>
-      <PageHeader title="Create invoice" description="Build the invoice by scanning or selecting products." />
+      <PageHeader
+        title="Create invoice"
+        description="Create a vehicle sale invoice or enter an old opening invoice."
+      />
       <Panel>
-        <InvoiceBuilderForm
-          mode="create"
-          defaultInvoiceDate={toDateInputValue(startOfToday())}
+        <InvoiceCreateSwitcher
+          defaultType={defaultType}
+          vehicleId={selectedVehicle?.id ?? ""}
+          vehicleName={selectedVehicle?.nameOrNumber ?? ""}
+          vehicles={vehicles.map((vehicle) => ({ id: vehicle.id, nameOrNumber: vehicle.nameOrNumber }))}
           shops={shops.map((shop) => ({ id: shop.id, name: shop.name }))}
-          trips={trips.map((trip) => ({
-            id: trip.id,
-            label: `${displayDate(trip.tripDate)} - ${trip.vehicle.nameOrNumber}`,
-            tripDate: toDateInputValue(trip.tripDate),
-            productIds: [...new Set(trip.items.map((item) => item.batch.productId))]
-          }))}
-          products={products.map((product) => ({
-            id: product.id,
-            name: product.name,
-            measurement: product.measurement,
-            supplierName: product.supplier.name,
-            barcode: product.barcode,
-            itemCode: product.itemCode,
-            sellingPrice: Number(product.sellingPrice),
-            priceLabel: money(product.sellingPrice)
-          }))}
+          stockRows={serializedStockRows}
+          defaultShopId={shopId ?? ""}
+          defaultInvoiceDate={selectedInvoiceDate}
+          maxInvoiceDate={today}
         />
       </Panel>
     </>

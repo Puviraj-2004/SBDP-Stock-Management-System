@@ -32,7 +32,7 @@ export function displayDate(date: Date | string | null | undefined) {
   const value = toDateInputValue(date);
   if (!value) return "";
   const [year, month, day] = value.split("-");
-  return `${day}/${month}/${year.slice(-2)}`;
+  return `${day}/${month}/${year}`;
 }
 
 export function money(value: unknown) {

@@ -1,11 +1,13 @@
 "use client";
 
+import { forwardRef } from "react";
 import { useMemo, useState } from "react";
 import { BarcodeScanInput } from "@/components/BarcodeScanInput";
+import { DatePickerInput } from "@/components/DatePickerInput";
 import { Button, Field, Input, Select } from "@/components/ui";
 import { receiveBatchAction } from "@/lib/actions";
 
-type ProductOption = {
+export type ProductOption = {
   id: string;
   name: string;
   measurement: string;
@@ -14,16 +16,25 @@ type ProductOption = {
   itemCode: string | null;
 };
 
-export function BatchReceiveForm({
-  products,
-  today
-}: {
+export const BatchReceiveForm = forwardRef<HTMLFormElement, {
   products: ProductOption[];
   today: string;
-}) {
+  defaultProductId?: string;
+  action?: (formData: FormData) => void | Promise<void>;
+  saving?: boolean;
+  error?: string;
+  hideActions?: boolean;
+}>(function BatchReceiveForm({
+  products,
+  today,
+  defaultProductId = "",
+  action = receiveBatchAction,
+  saving = false,
+  error = "",
+  hideActions = false
+}, ref) {
   const [scanCode, setScanCode] = useState("");
-  const [productId, setProductId] = useState("");
-
+  const [productId, setProductId] = useState(defaultProductId);
   const matches = useMemo(() => {
     const code = scanCode.trim().toLowerCase();
     if (!code) return [];
@@ -55,7 +66,7 @@ export function BatchReceiveForm({
   }
 
   return (
-    <form action={receiveBatchAction} className="grid gap-4">
+    <form ref={ref} action={action} className="grid gap-3">
       <BarcodeScanInput
         submitOnEnter={false}
         submitOnScan={false}
@@ -86,11 +97,19 @@ export function BatchReceiveForm({
         </Select>
       </Field>
       <div className="grid gap-3 md:grid-cols-3">
-        <Field label="Quantity"><Input name="quantity" type="number" min="1" required /></Field>
-        <Field label="Received date"><Input name="receivedDate" type="date" defaultValue={today} required /></Field>
-        <Field label="Expiry date"><Input name="expiryDate" type="date" required /></Field>
+        <Field label="Received quantity"><Input name="receivedQuantity" type="number" min="1" required /></Field>
+        <Field label="Cost price"><Input name="costPrice" type="number" min="0" step="0.01" required /></Field>
+        <Field label="Received date">
+          <DatePickerInput name="receivedDate" defaultValue={today} required />
+        </Field>
       </div>
-      <Button type="submit">Receive batch</Button>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Field label="Expiry date">
+          <DatePickerInput name="expiryDate" required />
+        </Field>
+      </div>
+      {error ? <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+      {hideActions ? null : <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Receive batch"}</Button>}
     </form>
   );
-}
+});

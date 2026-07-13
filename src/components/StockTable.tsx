@@ -15,10 +15,12 @@ type StockRow = {
   supplierName: string;
   barcode: string | null;
   itemCode: string | null;
-  quantity: number;
+  receivedQuantity: number;
+  warehouseBalance: number;
+  costPriceLabel: string;
   receivedDate: string;
   expiryDate: string;
-  tripItemCount: number;
+  movementCount: number;
 };
 
 export function StockTable({
@@ -39,13 +41,13 @@ export function StockTable({
     return rows.filter((row) => {
       const expired = row.expiryDate < today;
       const expiring = !expired && row.expiryDate <= soon;
-      const available = row.quantity > 0 && !expired;
+      const available = row.warehouseBalance > 0 && !expired;
 
       const stateMatch =
         !state ||
         (state === "available" && available) ||
-        (state === "expiring" && row.quantity > 0 && expiring) ||
-        (state === "expired" && row.quantity > 0 && expired);
+        (state === "expiring" && row.warehouseBalance > 0 && expiring) ||
+        (state === "expired" && row.warehouseBalance > 0 && expired);
 
       if (!stateMatch) return false;
       if (!normalized) return true;
@@ -72,7 +74,7 @@ export function StockTable({
         </Select>
       </div>
 
-      <Table headers={["Product", "Supplier", "Barcode", "Batch qty", "Received", "Expiry", "State", "Actions"]}>
+      <Table headers={["Product", "Supplier", "Barcode", "Original received", "Warehouse balance", "Cost", "Received date", "Expiry", "State", "Actions"]}>
         {filteredRows.map((row) => {
           const expired = row.expiryDate < today;
           const expiring = !expired && row.expiryDate <= soon;
@@ -84,7 +86,9 @@ export function StockTable({
               </td>
               <td className="px-3 py-2">{row.supplierName}</td>
               <td className="px-3 py-2 tabular">{row.barcode ?? row.itemCode ?? "-"}</td>
-              <td className="px-3 py-2 tabular">{row.quantity}</td>
+              <td className="px-3 py-2 tabular">{row.receivedQuantity}</td>
+              <td className="px-3 py-2 tabular">{row.warehouseBalance}</td>
+              <td className="px-3 py-2 tabular">{row.costPriceLabel}</td>
               <td className="px-3 py-2 tabular">{displayDate(row.receivedDate)}</td>
               <td className="px-3 py-2 tabular">{displayDate(row.expiryDate)}</td>
               <td className="px-3 py-2">
@@ -106,7 +110,7 @@ export function StockTable({
                   >
                     <Edit size={15} />
                   </Link>
-                  {row.tripItemCount === 0 ? (
+                  {row.movementCount === 0 ? (
                     <form action={deleteBatchAction}>
                       <input type="hidden" name="id" value={row.id} />
                       <ConfirmSubmitButton

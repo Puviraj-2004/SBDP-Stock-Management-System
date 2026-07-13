@@ -3,11 +3,18 @@ import { PageHeader, Panel } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { startOfToday, toDateInputValue } from "@/lib/dates";
 
-export default async function ReceiveStockPage() {
-  const products = await prisma.product.findMany({
-    include: { supplier: true },
-    orderBy: [{ name: "asc" }, { measurement: "asc" }]
-  });
+export default async function ReceiveStockPage({
+  searchParams
+}: {
+  searchParams: Promise<{ productId?: string }>;
+}) {
+  const [{ productId }, products] = await Promise.all([
+    searchParams,
+    prisma.product.findMany({
+      include: { supplier: true },
+      orderBy: [{ name: "asc" }, { measurement: "asc" }]
+    })
+  ]);
 
   return (
     <>
@@ -15,6 +22,7 @@ export default async function ReceiveStockPage() {
       <Panel className="max-w-3xl">
         <BatchReceiveForm
           today={toDateInputValue(startOfToday())}
+          defaultProductId={productId}
           products={products.map((product) => ({
             id: product.id,
             name: product.name,

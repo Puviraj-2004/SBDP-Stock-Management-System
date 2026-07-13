@@ -14,6 +14,12 @@ export function monthRangeFromInput(value?: string | null) {
   return { selected, start, end };
 }
 
+function previousMonth(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 2, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function monthLabel(value: string) {
   const [year, month] = value.split("-").map(Number);
   return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(
@@ -21,181 +27,175 @@ function monthLabel(value: string) {
   );
 }
 
-export async function getMonthlyProgress(month?: string | null) {
-  const { selected, start, end } = monthRangeFromInput(month);
+function percentChange(current: number, previous: number) {
+  if (previous === 0) return current === 0 ? 0 : 100;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
 
-  const [invoices, payments, trips, stockReceived, allInvoices, allPayments] = await Promise.all([
+async function outstandingAt(date: Date) {
+  const [invoices, payments] = await Promise.all([
+    prisma.invoice.findMany({
+      where: { invoiceDate: { lt: date } },
+      select: { totalAmount: true }
+    }),
+    prisma.payment.findMany({
+      where: { paymentDate: { lt: date } },
+      select: { amount: true, method: true, chequeStatus: true }
+    })
+  ]);
+
+  return (
+    invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0) -
+    payments.filter(paymentCountsTowardBalance).reduce((sum, payment) => sum + Number(payment.amount), 0)
+  );
+}
+
+async function monthCore(month: string) {
+  const { selected, start, end } = monthRangeFromInput(month);
+  const [invoices, payments, loads, returns] = await Promise.all([
     prisma.invoice.findMany({
       where: { invoiceDate: { gte: start, lt: end } },
       include: {
         shop: true,
-        trip: { include: { vehicle: true } },
-        items: { include: { product: { include: { supplier: true } } } },
-        allocations: { include: { payment: true } }
+        vehicle: true,
+        items: { include: { product: { include: { supplier: true } }, batch: true } }
       },
       orderBy: [{ invoiceDate: "asc" }, { createdAt: "asc" }]
     }),
     prisma.payment.findMany({
       where: { paymentDate: { gte: start, lt: end } },
-      include: { shop: true, allocations: { include: { invoice: true } } },
+      include: { shop: true },
       orderBy: [{ paymentDate: "asc" }, { createdAt: "asc" }]
     }),
-    prisma.loadingTrip.findMany({
-      where: { tripDate: { gte: start, lt: end } },
-      include: {
-        vehicle: true,
-        supplier: true,
-        items: true,
-        invoices: { select: { id: true, totalAmount: true } }
-      },
-      orderBy: [{ tripDate: "asc" }, { createdAt: "asc" }]
+    prisma.vehicleLoad.findMany({
+      where: { loadDate: { gte: start, lt: end } },
+      include: { vehicle: true, items: true },
+      orderBy: [{ loadDate: "asc" }, { createdAt: "asc" }]
     }),
-    prisma.productBatch.findMany({
-      where: { receivedDate: { gte: start, lt: end } },
-      include: { product: { include: { supplier: true } } },
-      orderBy: [{ receivedDate: "asc" }, { createdAt: "asc" }]
-    }),
-    prisma.invoice.findMany({ select: { totalAmount: true } }),
-    prisma.payment.findMany({ select: { amount: true, method: true, chequeStatus: true } })
+    prisma.vehicleReturn.findMany({
+      where: { returnDate: { gte: start, lt: end } },
+      include: { vehicle: true, items: true },
+      orderBy: [{ returnDate: "asc" }, { createdAt: "asc" }]
+    })
   ]);
 
   const countedPayments = payments.filter(paymentCountsTowardBalance);
-  const allCountedPayments = allPayments.filter(paymentCountsTowardBalance);
-  const invoiceValue = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
-  const collectionValue = countedPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-  const totalOutstanding =
-    allInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0) -
-    allCountedPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const sales = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
+  const paymentsReceived = countedPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const loadedUnits = loads.reduce((sum, load) => sum + load.items.reduce((itemSum, item) => itemSum + item.quantityLoaded, 0), 0);
+  const returnedUnits = returns.reduce((sum, vehicleReturn) => sum + vehicleReturn.items.reduce((itemSum, item) => itemSum + item.quantityReturned, 0), 0);
+  const soldUnits = invoices.reduce((sum, invoice) => sum + invoice.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+  const profit = invoices.reduce((sum, invoice) => {
+    return sum + invoice.items.reduce((itemSum, item) => {
+      const revenue = Number(item.lineTotal);
+      const cost = Number(item.batch.costPrice) * item.quantity;
+      return itemSum + revenue - cost;
+    }, 0);
+  }, 0);
 
-  const productMap = new Map<string, { product: string; supplier: string; quantity: number; value: number }>();
-  const shopMap = new Map<string, { shop: string; invoices: number; value: number; paid: number; remaining: number }>();
-  const vehicleMap = new Map<
-    string,
-    {
-      vehicle: string;
-      trips: number;
-      invoices: number;
-      sales: number;
-      collections: number;
-      loaded: number;
-      returned: number;
-      expectedSold: number;
-    }
-  >();
+  return { selected, start, end, invoices, payments, loads, returns, totals: { sales, paymentsReceived, loadedUnits, returnedUnits, soldUnits, profit } };
+}
 
-  for (const trip of trips) {
-    const current =
-      vehicleMap.get(trip.vehicleId) ??
-      {
-        vehicle: trip.vehicle.nameOrNumber,
-        trips: 0,
-        invoices: 0,
-        sales: 0,
-        collections: 0,
-        loaded: 0,
-        returned: 0,
-        expectedSold: 0
-      };
-    current.trips += 1;
-    current.loaded += trip.items.reduce((sum, item) => sum + item.quantityLoaded, 0);
-    current.returned += trip.items.reduce((sum, item) => sum + (item.quantityReturned ?? 0), 0);
-    current.expectedSold = current.loaded - current.returned;
-    vehicleMap.set(trip.vehicleId, current);
+export async function getMonthlyProgress(month?: string | null) {
+  const { selected } = monthRangeFromInput(month);
+  const previous = previousMonth(selected);
+  const [current, previousData] = await Promise.all([monthCore(selected), monthCore(previous)]);
+  const [outstandingStart, outstandingEnd, previousOutstandingStart, previousOutstandingEnd] = await Promise.all([
+    outstandingAt(current.start),
+    outstandingAt(current.end),
+    outstandingAt(previousData.start),
+    outstandingAt(previousData.end)
+  ]);
+
+  const vehicleMap = new Map<string, { vehicleId: string; vehicle: string; loaded: number; sold: number; returned: number }>();
+  const productMap = new Map<string, { productId: string; product: string; supplier: string; unitsSold: number; revenue: number; profit: number }>();
+  const shopMap = new Map<string, { shopId: string; shop: string; invoiceTotal: number; paymentsReceived: number }>();
+  const trendMap = new Map<string, number>();
+
+  for (let date = new Date(current.start); date < current.end; date.setUTCDate(date.getUTCDate() + 1)) {
+    trendMap.set(toDateInputValue(date), 0);
   }
 
-  for (const invoice of invoices) {
-    const shopCurrent =
-      shopMap.get(invoice.shopId) ??
-      { shop: invoice.shop.name, invoices: 0, value: 0, paid: 0, remaining: 0 };
-    const invoiceTotal = Number(invoice.totalAmount);
-    const paid = invoice.allocations
-      .filter((allocation) => paymentCountsTowardBalance(allocation.payment))
-      .reduce((sum, allocation) => sum + Number(allocation.amount), 0);
-    shopCurrent.invoices += 1;
-    shopCurrent.value += invoiceTotal;
-    shopCurrent.paid += paid;
-    shopCurrent.remaining += Math.max(0, invoiceTotal - paid);
-    shopMap.set(invoice.shopId, shopCurrent);
+  for (const load of current.loads) {
+    const row = vehicleMap.get(load.vehicleId) ?? { vehicleId: load.vehicleId, vehicle: load.vehicle.nameOrNumber, loaded: 0, sold: 0, returned: 0 };
+    row.loaded += load.items.reduce((sum, item) => sum + item.quantityLoaded, 0);
+    vehicleMap.set(load.vehicleId, row);
+  }
 
-    if (invoice.trip) {
-      const vehicleCurrent =
-        vehicleMap.get(invoice.trip.vehicleId) ??
-        {
-          vehicle: invoice.trip.vehicle.nameOrNumber,
-          trips: 0,
-          invoices: 0,
-          sales: 0,
-          collections: 0,
-          loaded: 0,
-          returned: 0,
-          expectedSold: 0
-        };
-      vehicleCurrent.invoices += 1;
-      vehicleCurrent.sales += invoiceTotal;
-      vehicleCurrent.collections += paid;
-      vehicleMap.set(invoice.trip.vehicleId, vehicleCurrent);
+  for (const vehicleReturn of current.returns) {
+    const row = vehicleMap.get(vehicleReturn.vehicleId) ?? { vehicleId: vehicleReturn.vehicleId, vehicle: vehicleReturn.vehicle.nameOrNumber, loaded: 0, sold: 0, returned: 0 };
+    row.returned += vehicleReturn.items.reduce((sum, item) => sum + item.quantityReturned, 0);
+    vehicleMap.set(vehicleReturn.vehicleId, row);
+  }
+
+  for (const invoice of current.invoices) {
+    const invoiceTotal = Number(invoice.totalAmount);
+    const day = toDateInputValue(invoice.invoiceDate);
+    trendMap.set(day, (trendMap.get(day) ?? 0) + invoiceTotal);
+
+    const shop = shopMap.get(invoice.shopId) ?? { shopId: invoice.shopId, shop: invoice.shop.name, invoiceTotal: 0, paymentsReceived: 0 };
+    shop.invoiceTotal += invoiceTotal;
+    shopMap.set(invoice.shopId, shop);
+
+    if (invoice.vehicleId && invoice.vehicle) {
+      const vehicle = vehicleMap.get(invoice.vehicleId) ?? { vehicleId: invoice.vehicleId, vehicle: invoice.vehicle.nameOrNumber, loaded: 0, sold: 0, returned: 0 };
+      vehicle.sold += invoice.items.reduce((sum, item) => sum + item.quantity, 0);
+      vehicleMap.set(invoice.vehicleId, vehicle);
     }
 
     for (const item of invoice.items) {
-      const key = item.productId;
-      const current =
-        productMap.get(key) ??
-        {
-          product: `${item.product.name} ${item.product.measurement}`,
-          supplier: item.product.supplier.name,
-          quantity: 0,
-          value: 0
-        };
-      current.quantity += item.quantity;
-      current.value += Number(item.lineTotal);
-      productMap.set(key, current);
+      const product = productMap.get(item.productId) ?? {
+        productId: item.productId,
+        product: `${item.product.name} ${item.product.measurement}`,
+        supplier: item.product.supplier.name,
+        unitsSold: 0,
+        revenue: 0,
+        profit: 0
+      };
+      const revenue = Number(item.lineTotal);
+      const cost = Number(item.batch.costPrice) * item.quantity;
+      product.unitsSold += item.quantity;
+      product.revenue += revenue;
+      product.profit += revenue - cost;
+      productMap.set(item.productId, product);
     }
   }
 
-  const vehicleRows = Array.from(vehicleMap.values()).sort((a, b) => b.sales - a.sales);
-  const topVehicleSales = vehicleRows[0]?.sales ?? 0;
+  for (const payment of current.payments.filter(paymentCountsTowardBalance)) {
+    const shop = shopMap.get(payment.shopId) ?? { shopId: payment.shopId, shop: payment.shop.name, invoiceTotal: 0, paymentsReceived: 0 };
+    shop.paymentsReceived += Number(payment.amount);
+    shopMap.set(payment.shopId, shop);
+  }
+
+  const outstandingChange = outstandingEnd - outstandingStart;
+  const previousOutstandingChange = previousOutstandingEnd - previousOutstandingStart;
 
   return {
     selected,
     label: monthLabel(selected),
-    invoices,
-    payments,
-    trips: trips.map((trip) => {
-      const loaded = trip.items.reduce((sum, item) => sum + item.quantityLoaded, 0);
-      const returned = trip.items.reduce((sum, item) => sum + (item.quantityReturned ?? 0), 0);
-      return {
-        id: trip.id,
-        date: displayDate(trip.tripDate),
-        vehicle: trip.vehicle.nameOrNumber,
-        supplier: trip.supplier?.name ?? "Mixed",
-        loaded,
-        returned,
-        expectedSold: loaded - returned,
-        invoiceValue: trip.invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0),
-        status: trip.status
-      };
-    }),
-    stockReceived,
-    productRows: Array.from(productMap.values()).sort((a, b) => b.value - a.value),
-    shopRows: Array.from(shopMap.values()).sort((a, b) => b.value - a.value),
-    vehicleRows: vehicleRows.map((vehicle, index) => ({
-      ...vehicle,
-      rank: index + 1,
-      differenceFromTop: topVehicleSales - vehicle.sales,
-      salesPercent: topVehicleSales > 0 ? (vehicle.sales / topVehicleSales) * 100 : 0
-    })),
+    previous,
+    previousLabel: monthLabel(previous),
+    vehicleRows: Array.from(vehicleMap.values())
+      .map((vehicle) => ({
+        ...vehicle,
+        sellThrough: vehicle.loaded > 0 ? (vehicle.sold / vehicle.loaded) * 100 : 0
+      }))
+      .sort((a, b) => b.sold - a.sold),
+    productRows: Array.from(productMap.values()).sort((a, b) => b.revenue - a.revenue),
+    shopRows: Array.from(shopMap.values()).sort((a, b) => b.invoiceTotal - a.invoiceTotal),
+    dailyTrend: Array.from(trendMap.entries()).map(([date, sales]) => ({ date, sales })),
     totals: {
-      invoiceValue,
-      collectionValue,
-      invoiceCount: invoices.length,
-      paymentCount: payments.length,
-      tripCount: trips.length,
-      shopCount: shopMap.size,
-      stockReceivedUnits: stockReceived.reduce((sum, batch) => sum + batch.quantity, 0),
-      pendingChequeValue: payments
-        .filter((payment) => payment.method === "cheque" && payment.chequeStatus === "pending")
-        .reduce((sum, payment) => sum + Number(payment.amount), 0),
-      totalOutstanding
+      ...current.totals,
+      outstandingChange
+    },
+    comparisons: {
+      sales: percentChange(current.totals.sales, previousData.totals.sales),
+      paymentsReceived: percentChange(current.totals.paymentsReceived, previousData.totals.paymentsReceived),
+      outstandingChange: percentChange(outstandingChange, previousOutstandingChange),
+      soldUnits: percentChange(current.totals.soldUnits, previousData.totals.soldUnits),
+      loadedUnits: percentChange(current.totals.loadedUnits, previousData.totals.loadedUnits),
+      returnedUnits: percentChange(current.totals.returnedUnits, previousData.totals.returnedUnits),
+      profit: percentChange(current.totals.profit, previousData.totals.profit)
     }
   };
 }

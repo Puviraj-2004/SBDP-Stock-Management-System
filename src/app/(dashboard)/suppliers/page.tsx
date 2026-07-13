@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Edit, Eye, Trash2 } from "lucide-react";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
-import { Button, Field, Input, PageHeader, Panel, Table, TextArea } from "@/components/ui";
-import { createSupplierAction, deleteSupplierAction } from "@/lib/actions";
+import { SupplierCreateDialog } from "@/components/SupplierCreateDialog";
+import { PageHeader, Table } from "@/components/ui";
+import { deleteSupplierAction } from "@/lib/actions";
 import { prisma } from "@/lib/db";
 
 export default async function SuppliersPage() {
@@ -13,16 +14,12 @@ export default async function SuppliersPage() {
 
   return (
     <>
-      <PageHeader title="Suppliers" description="Register supplier companies once and reuse them across products and trips." />
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <Panel>
-          <h2 className="mb-3 font-semibold">Add supplier</h2>
-          <form action={createSupplierAction} className="grid gap-3">
-            <Field label="Name"><Input name="name" required /></Field>
-            <Field label="Contact info"><TextArea name="contactInfo" /></Field>
-            <Button type="submit">Save supplier</Button>
-          </form>
-        </Panel>
+      <PageHeader
+        title="Suppliers"
+        description="Register supplier companies once and reuse them across products and loads."
+        action={<SupplierCreateDialog />}
+      />
+      <div className="grid gap-5">
         <Table headers={["Name", "Contact", "Products", "Actions"]}>
           {suppliers.map((supplier) => (
             <tr key={supplier.id}>

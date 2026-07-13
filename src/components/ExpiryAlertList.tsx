@@ -3,29 +3,31 @@ import { Eye } from "lucide-react";
 import { Badge, EmptyState, Table } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { displayDate, inTwoMonths, startOfToday } from "@/lib/dates";
+import { getWarehouseBalancesByBatchIds } from "@/lib/stockLedger";
 
 export async function ExpiryAlertList() {
   const batches = await prisma.productBatch.findMany({
     where: {
-      quantity: { gt: 0 },
       expiryDate: { gte: startOfToday(), lte: inTwoMonths() }
     },
     include: { product: { include: { supplier: true } } },
     orderBy: { expiryDate: "asc" },
     take: 12
   });
+  const warehouseBalances = await getWarehouseBalancesByBatchIds(batches.map((batch) => batch.id));
+  const batchesWithStock = batches.filter((batch) => (warehouseBalances.get(batch.id) ?? 0) > 0);
 
-  if (batches.length === 0) {
+  if (batchesWithStock.length === 0) {
     return <EmptyState>No stock is expiring within the next two months.</EmptyState>;
   }
 
   return (
     <Table headers={["Product", "Supplier", "Qty", "Expiry", "State", "Action"]}>
-      {batches.map((batch) => (
+      {batchesWithStock.map((batch) => (
         <tr key={batch.id}>
           <td className="px-3 py-2 font-medium">{batch.product.name} {batch.product.measurement}</td>
           <td className="px-3 py-2">{batch.product.supplier.name}</td>
-          <td className="px-3 py-2 tabular">{batch.quantity}</td>
+          <td className="px-3 py-2 tabular">{warehouseBalances.get(batch.id) ?? 0}</td>
           <td className="px-3 py-2 tabular">{displayDate(batch.expiryDate)}</td>
           <td className="px-3 py-2">
             <Badge tone="amber">expiring soon</Badge>

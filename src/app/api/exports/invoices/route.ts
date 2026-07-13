@@ -11,7 +11,7 @@ export async function GET() {
   const invoices = await prisma.invoice.findMany({
     include: {
       shop: true,
-      trip: { include: { vehicle: true } },
+      vehicle: true,
       items: { include: { product: true } }
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }]
@@ -24,7 +24,7 @@ export async function GET() {
       return [
         displayDate(invoice.invoiceDate),
         invoice.shop.name,
-        invoice.trip ? `${displayDate(invoice.trip.tripDate)} - ${invoice.trip.vehicle.nameOrNumber}` : "-",
+        invoice.invoiceType === "opening" ? "Old invoice" : invoice.vehicle?.nameOrNumber ?? "-",
         invoice.items.map((item) => item.product.name).join(", "),
         invoice.items.length,
         total,
@@ -38,7 +38,7 @@ export async function GET() {
   return workbookResponse("invoices-export.xlsx", [
     {
       name: "Invoices",
-      columns: ["Invoice Date", "Shop", "Trip", "Products", "Items", "Total", "Paid", "Remaining", "Paid Status"],
+      columns: ["Invoice Date", "Shop", "Source", "Products", "Items", "Total", "Paid", "Remaining", "Paid Status"],
       rows
     }
   ]);

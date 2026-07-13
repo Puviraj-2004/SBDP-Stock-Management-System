@@ -7,9 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum TripStatus {
-  loaded
-  closed
+enum StockTransactionType {
+  load
+  sale
+  return_to_warehouse
+  adjustment
 }
 
 enum PaidStatus {
@@ -35,26 +37,29 @@ enum ChequeStatus {
 }
 
 model Supplier {
-  id          String        @id @default(uuid())
+  id          String   @id @default(uuid())
   name        String
   contactInfo String?
-  createdAt   DateTime      @default(now())
-  products    Product[]
-  trips       LoadingTrip[]
+  createdAt   DateTime @default(now())
+
+  products Product[]
 }
 
 model Product {
-  id           String            @id @default(uuid())
+  id           String   @id @default(uuid())
   supplierId   String
-  supplier     Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   name         String
   measurement  String
   barcode      String?
   itemCode     String?
-  sellingPrice Decimal           @db.Decimal(12, 2)
-  createdAt    DateTime          @default(now())
-  batches      ProductBatch[]
-  invoiceItems InvoiceItem[]
+  sellingPrice Decimal  @db.Decimal(12, 2)
+  mrp          Decimal? @db.Decimal(12, 2)
+  createdAt    DateTime @default(now())
+
+  batches       ProductBatch[]
+  invoiceItems  InvoiceItem[]
+  ledgerEntries VehicleStockLedger[]
 
   @@unique([name, measurement, supplierId])
   @@index([barcode, supplierId])
@@ -62,112 +67,178 @@ model Product {
 }
 
 model ProductBatch {
-  id             String            @id @default(uuid())
-  productId      String
-  product        Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
-  quantity       Int
-  expiryDate     DateTime          @db.Date
-  receivedDate   DateTime          @db.Date
-  alertSent      Boolean           @default(false)
-  createdAt      DateTime          @default(now())
-  tripItems      LoadingTripItem[]
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  receivedQuantity Int
+  costPrice        Decimal  @db.Decimal(12, 2)
+  expiryDate       DateTime @db.Date
+  receivedDate     DateTime @db.Date
+  alertSent        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  loadItems     VehicleLoadItem[]
+  returnItems   VehicleReturnItem[]
+  invoiceItems  InvoiceItem[]
+  ledgerEntries VehicleStockLedger[]
 
   @@index([productId, expiryDate])
 }
 
 model Vehicle {
-  id           String        @id @default(uuid())
-  nameOrNumber String        @unique
-  createdAt    DateTime      @default(now())
-  trips        LoadingTrip[]
+  id           String   @id @default(uuid())
+  nameOrNumber String   @unique
+  createdAt    DateTime @default(now())
+
+  loads         VehicleLoad[]
+  returns       VehicleReturn[]
+  invoices      Invoice[]
+  ledgerEntries VehicleStockLedger[]
 }
 
 model Shop {
-  id            String    @id @default(uuid())
+  id            String   @id @default(uuid())
   name          String
   address       String?
   contactNumber String?
-  createdAt     DateTime  @default(now())
-  invoices      Invoice[]
-  payments      Payment[]
+  createdAt     DateTime @default(now())
+
+  invoices Invoice[]
+  payments Payment[]
 }
 
-model LoadingTrip {
-  id         String            @id @default(uuid())
-  vehicleId  String
-  vehicle    Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
-  supplierId String?
-  supplier   Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  tripDate   DateTime          @default(now()) @db.Date
-  status     TripStatus        @default(loaded)
-  createdAt  DateTime          @default(now())
-  closedAt   DateTime?
-  items      LoadingTripItem[]
-  invoices   Invoice[]
+model VehicleLoad {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  loadDate  DateTime @default(now()) @db.Date
+  createdAt DateTime @default(now())
 
-  @@index([tripDate, status])
+  items VehicleLoadItem[]
+
+  @@index([vehicleId, loadDate])
 }
 
-model LoadingTripItem {
-  id               String       @id @default(uuid())
-  tripId           String
-  trip             LoadingTrip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  batchId          String
-  batch            ProductBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  quantityLoaded   Int
-  quantityReturned Int?
+model VehicleLoadItem {
+  id             String       @id @default(uuid())
+  loadId         String
+  load           VehicleLoad  @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  batchId        String
+  batch          ProductBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  quantityLoaded Int
 
-  @@index([tripId])
+  ledgerEntry VehicleStockLedger?
+
+  @@index([loadId])
   @@index([batchId])
 }
 
+model VehicleReturn {
+  id         String   @id @default(uuid())
+  vehicleId  String
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  returnDate DateTime @default(now()) @db.Date
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  items VehicleReturnItem[]
+
+  @@index([vehicleId, returnDate])
+}
+
+model VehicleReturnItem {
+  id               String        @id @default(uuid())
+  returnId         String
+  return           VehicleReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  batchId          String
+  batch            ProductBatch  @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  quantityExpected Int
+  quantityReturned Int
+
+  ledgerEntry VehicleStockLedger?
+
+  @@index([returnId])
+  @@index([batchId])
+}
+
+model VehicleStockLedger {
+  id              String               @id @default(uuid())
+  vehicleId       String
+  vehicle         Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  productId       String
+  product         Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batchId         String
+  batch           ProductBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  transactionType StockTransactionType
+  quantityChange  Int
+  transactionDate DateTime             @db.Date
+  createdAt       DateTime             @default(now())
+
+  loadItemId    String?            @unique
+  loadItem      VehicleLoadItem?   @relation(fields: [loadItemId], references: [id], onDelete: Cascade)
+  returnItemId  String?            @unique
+  returnItem    VehicleReturnItem? @relation(fields: [returnItemId], references: [id], onDelete: Cascade)
+  invoiceItemId String?            @unique
+  invoiceItem   InvoiceItem?       @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, productId, transactionDate])
+  @@index([batchId, transactionDate])
+}
+
 model Invoice {
-  id          String        @id @default(uuid())
-  shopId      String
-  shop        Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  tripId      String?
-  trip        LoadingTrip?  @relation(fields: [tripId], references: [id], onDelete: SetNull)
-  invoiceType InvoiceType   @default(sale)
+  id              String      @id @default(uuid())
+  shopId          String
+  shop            Shop        @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  vehicleId       String?
+  vehicle         Vehicle?    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  invoiceType     InvoiceType @default(sale)
   referenceNumber String?
-  notes       String?
-  invoiceDate DateTime      @default(now()) @db.Date
-  totalAmount Decimal       @default(0) @db.Decimal(12, 2)
-  paidStatus  PaidStatus    @default(unpaid)
-  createdAt   DateTime      @default(now())
+  notes           String?
+  invoiceDate     DateTime    @default(now()) @db.Date
+  totalAmount     Decimal     @default(0) @db.Decimal(12, 2)
+  paidStatus      PaidStatus  @default(unpaid)
+  createdAt       DateTime    @default(now())
+
   items       InvoiceItem[]
   payments    Payment[]
   allocations PaymentAllocation[]
 
   @@index([shopId, invoiceDate])
-  @@index([tripId])
+  @@index([vehicleId])
   @@index([invoiceType])
 }
 
 model InvoiceItem {
-  id        String   @id @default(uuid())
+  id        String       @id @default(uuid())
   invoiceId String
-  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice   Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batchId   String
+  batch     ProductBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
   quantity  Int
-  unitPrice Decimal  @db.Decimal(12, 2)
-  lineTotal Decimal  @db.Decimal(12, 2)
+  unitPrice Decimal      @db.Decimal(12, 2)
+  lineTotal Decimal      @db.Decimal(12, 2)
+
+  ledgerEntry VehicleStockLedger?
 }
 
 model Payment {
-  id            String        @id @default(uuid())
-  shopId        String
-  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  invoiceId     String?
-  invoice       Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  paymentDate   DateTime      @default(now()) @db.Date
-  amount        Decimal       @db.Decimal(12, 2)
-  method        PaymentMethod
-  chequeNumber  String?
-  chequeStatus  ChequeStatus?
-  notes         String?
-  createdAt     DateTime      @default(now())
-  allocations   PaymentAllocation[]
+  id           String        @id @default(uuid())
+  shopId       String
+  shop         Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  invoiceId    String?
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  paymentDate  DateTime      @default(now()) @db.Date
+  amount       Decimal       @db.Decimal(12, 2)
+  method       PaymentMethod
+  chequeNumber String?
+  chequeStatus ChequeStatus?
+  notes        String?
+  createdAt    DateTime      @default(now())
+
+  allocations PaymentAllocation[]
 
   @@index([shopId, paymentDate])
   @@index([invoiceId])
@@ -187,7 +258,7 @@ model PaymentAllocation {
 }
 
 model Owner {
-  id           String   @id @default(uuid())
-  username     String   @unique
+  id           String @id @default(uuid())
+  username     String @unique
   passwordHash String
 }

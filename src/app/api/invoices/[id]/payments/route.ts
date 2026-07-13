@@ -1,11 +1,14 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { requireApiAuth } from "@/lib/apiAuth";
 import { prisma } from "@/lib/db";
 import { getInvoicePaidAmount, paymentCountsTowardBalance, refreshInvoicePaidStatus } from "@/lib/balance";
 import { dateInputToDate } from "@/lib/dates";
 import { paymentSchema } from "@/lib/validations";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const unauthorized = await requireApiAuth();
+  if (unauthorized) return unauthorized;
   const { id } = await params;
   const invoice = await prisma.invoice.findUnique({ where: { id } });
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });

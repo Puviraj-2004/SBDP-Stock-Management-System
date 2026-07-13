@@ -15,7 +15,13 @@ export default async function InvoicesPage({
   const page = parsePage(pageParam);
   const [invoices, totalInvoices] = await Promise.all([
     prisma.invoice.findMany({
-      include: { shop: true, trip: { include: { vehicle: true } }, _count: { select: { allocations: true, items: true } } },
+      include: {
+        shop: true,
+        vehicle: true,
+        allocations: { select: { paymentId: true } },
+        payments: { select: { id: true } },
+        _count: { select: { items: true } }
+      },
       orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
       ...getPagination(page)
     }),
@@ -30,7 +36,6 @@ export default async function InvoicesPage({
         action={
           <div className="flex flex-wrap gap-2">
             <ExportButton href="/api/exports/invoices">Export Excel</ExportButton>
-            <LinkButton href="/invoices/old" variant="secondary">Add old invoice</LinkButton>
             <LinkButton href="/invoices/new">Create invoice</LinkButton>
           </div>
         }
@@ -42,14 +47,17 @@ export default async function InvoicesPage({
           shopName: invoice.shop.name,
           invoiceType: invoice.invoiceType,
           referenceNumber: invoice.referenceNumber,
-          tripLabel: invoice.invoiceType === "opening"
+          sourceLabel: invoice.invoiceType === "opening"
             ? "Old invoice"
-            : invoice.trip
-              ? `${displayDate(invoice.trip.tripDate)} - ${invoice.trip.vehicle.nameOrNumber}`
+            : invoice.vehicle
+              ? invoice.vehicle.nameOrNumber
               : "-",
           itemCount: invoice._count.items,
           amountLabel: money(invoice.totalAmount),
-          allocationCount: invoice._count.allocations,
+          paymentCount: new Set([
+            ...invoice.allocations.map((allocation) => allocation.paymentId),
+            ...invoice.payments.map((payment) => payment.id)
+          ]).size,
           paidStatus: invoice.paidStatus
         }))}
       />

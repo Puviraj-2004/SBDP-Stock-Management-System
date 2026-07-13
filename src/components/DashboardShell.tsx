@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
@@ -10,6 +11,7 @@ import { logoutAction } from "@/lib/actions";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
 
   return (
     <div
@@ -28,7 +30,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </form>
       </header>
 
-      <aside className="hidden border-line bg-[#ebe7dd] lg:sticky lg:top-0 lg:block lg:h-screen lg:border-r">
+      <aside className="hidden border-line bg-[#ebe7dd] lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r">
         <div className={collapsed ? "flex justify-center px-2 py-4" : "flex items-start justify-between gap-2 px-4 py-4"}>
           {collapsed ? null : <BrandLogo />}
           <Button
@@ -43,11 +45,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        <div className={collapsed ? "max-h-[calc(100vh-124px)] overflow-y-auto" : "max-h-[calc(100vh-132px)] overflow-y-auto"}>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <SidebarNav collapsed={collapsed} />
         </div>
 
-        <form action={logoutAction} className={collapsed ? "px-2 pt-3" : "px-3 pt-3"}>
+        <form action={logoutAction} className={collapsed ? "border-t border-line px-2 py-3" : "border-t border-line px-3 py-3"}>
           <Button variant="secondary" className={collapsed ? "w-full px-0" : "w-full"} title="Sign out" aria-label="Sign out">
             <LogOut size={16} />
             {collapsed ? null : "Sign out"}
@@ -55,7 +57,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </form>
       </aside>
 
-      <main className="p-4 lg:p-6">{children}</main>
+      <main key={pathname} className="p-4 lg:p-6">{children}</main>
     </div>
   );
 }

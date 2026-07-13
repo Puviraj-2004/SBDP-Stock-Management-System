@@ -8,7 +8,11 @@ import { prisma } from "@/lib/db";
 const cookieName = "store_session";
 
 function secret() {
-  return process.env.AUTH_SECRET ?? "development-secret-change-me";
+  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET is required in production");
+  }
+  return "development-secret-change-me";
 }
 
 function sign(value: string) {

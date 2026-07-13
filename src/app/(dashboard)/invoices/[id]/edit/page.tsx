@@ -1,26 +1,42 @@
 import { notFound } from "next/navigation";
-import { InvoiceBuilderForm } from "@/components/InvoiceBuilderForm";
-import { PageHeader, Panel } from "@/components/ui";
+import type { Prisma } from "@prisma/client";
+import { VehicleInvoiceForm } from "@/components/VehicleInvoiceForm";
+import { LinkButton, PageHeader, Panel } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { displayDate, money, toDateInputValue } from "@/lib/dates";
+import { dateInputToDate, displayDate, money, startOfToday, toDateInputValue } from "@/lib/dates";
+import { getVehicleStockRows } from "@/lib/stockLedger";
 
-export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
+type EditableInvoice = Prisma.InvoiceGetPayload<{
+  include: {
+    shop: true;
+    vehicle: true;
+    allocations: true;
+    payments: true;
+    items: { include: { batch: { include: { product: { include: { supplier: true } } } } } };
+  };
+}>;
+
+export default async function EditInvoicePage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ invoiceDate?: string }>;
+}) {
   const { id } = await params;
-  const [invoice, shops, products, trips] = await Promise.all([
+  const { invoiceDate } = await searchParams;
+  const [invoice, shops] = await Promise.all([
     prisma.invoice.findUnique({
       where: { id },
-      include: { shop: true, items: true, payments: true, allocations: true }
-    }),
-    prisma.shop.findMany({ orderBy: { name: "asc" } }),
-    prisma.product.findMany({ include: { supplier: true }, orderBy: { name: "asc" } }),
-    prisma.loadingTrip.findMany({
       include: {
+        shop: true,
         vehicle: true,
-        items: { include: { batch: { select: { productId: true } } } }
-      },
-      orderBy: { tripDate: "desc" },
-      take: 100
-    })
+        allocations: true,
+        payments: true,
+        items: { include: { batch: { include: { product: { include: { supplier: true } } } } } }
+      }
+    }),
+    prisma.shop.findMany({ orderBy: { name: "asc" } })
   ]);
   if (!invoice) notFound();
   if (invoice.invoiceType === "opening") {
@@ -28,9 +44,10 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
       <>
         <PageHeader title="Edit old invoice" description={`${invoice.shop.name} - ${money(invoice.totalAmount)}`} />
         <Panel>
-          <p className="text-sm text-muted">
+          <p className="mb-3 text-sm text-muted">
             Old invoices are amount-only opening bills. Delete and re-enter the old invoice if this was a data entry mistake.
           </p>
+          <LinkButton href={`/invoices/${invoice.id}`} variant="secondary">Back to invoice</LinkButton>
         </Panel>
       </>
     );
@@ -41,38 +58,78 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
       <PageHeader title="Edit invoice" description={`${invoice.shop.name} - ${money(invoice.totalAmount)}`} />
       <Panel>
         {invoice.payments.length > 0 || invoice.allocations.length > 0 ? (
-          <p className="text-sm text-muted">This invoice has payments, so edit is locked. Delete or adjust the payment first if this was a data entry mistake.</p>
+          <>
+            <p className="mb-3 text-sm text-muted">
+              This invoice has payments, so edit is locked. Delete or adjust the payment first if this was a data entry mistake.
+            </p>
+            <LinkButton href={`/invoices/${invoice.id}`} variant="secondary">Back to invoice</LinkButton>
+          </>
+        ) : !invoice.vehicle ? (
+          <p className="text-sm text-muted">This invoice has no vehicle linked, so it cannot be edited in the V1 stock flow.</p>
         ) : (
-          <InvoiceBuilderForm
-            mode="edit"
-            invoiceId={invoice.id}
-            defaultShopId={invoice.shopId}
-            defaultTripId={invoice.tripId ?? ""}
-            defaultInvoiceDate={toDateInputValue(invoice.invoiceDate)}
-            initialItems={invoice.items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity
-            }))}
-            shops={shops.map((shop) => ({ id: shop.id, name: shop.name }))}
-            trips={trips.map((trip) => ({
-              id: trip.id,
-              label: `${displayDate(trip.tripDate)} - ${trip.vehicle.nameOrNumber}`,
-              tripDate: toDateInputValue(trip.tripDate),
-              productIds: [...new Set(trip.items.map((item) => item.batch.productId))]
-            }))}
-            products={products.map((product) => ({
-              id: product.id,
-              name: product.name,
-              measurement: product.measurement,
-              supplierName: product.supplier.name,
-              barcode: product.barcode,
-              itemCode: product.itemCode,
-              sellingPrice: Number(product.sellingPrice),
-              priceLabel: money(product.sellingPrice)
-            }))}
-          />
+          <EditSaleInvoiceForm invoice={invoice} shops={shops} invoiceDateParam={invoiceDate} />
         )}
       </Panel>
     </>
+  );
+}
+
+async function EditSaleInvoiceForm({
+  invoice,
+  shops,
+  invoiceDateParam
+}: {
+  invoice: EditableInvoice;
+  shops: { id: string; name: string }[];
+  invoiceDateParam?: string;
+}) {
+  if (!invoice.vehicleId || !invoice.vehicle) return null;
+
+  const today = toDateInputValue(startOfToday());
+  const selectedInvoiceDate = invoiceDateParam && invoiceDateParam <= today ? invoiceDateParam : toDateInputValue(invoice.invoiceDate);
+  const stockRows = await getVehicleStockRows(invoice.vehicleId, dateInputToDate(selectedInvoiceDate));
+  const rowsByBatch = new Map(stockRows.map((row) => [row.batchId, { ...row }]));
+
+  for (const item of invoice.items) {
+    const existing = rowsByBatch.get(item.batchId);
+    if (existing) {
+      existing.balance += item.quantity;
+    } else {
+      rowsByBatch.set(item.batchId, {
+        productId: item.productId,
+        batchId: item.batchId,
+        productName: item.batch.product.name,
+        measurement: item.batch.product.measurement,
+        supplierName: item.batch.product.supplier.name,
+        barcode: item.batch.product.barcode,
+        itemCode: item.batch.product.itemCode,
+        sellingPrice: item.batch.product.sellingPrice,
+        expiryDate: item.batch.expiryDate,
+        balance: item.quantity
+      });
+    }
+  }
+
+  const serializedStockRows = Array.from(rowsByBatch.values()).map(({ expiryDate, sellingPrice, ...row }) => ({
+    ...row,
+    expiryLabel: displayDate(expiryDate),
+    sellingPrice: Number(sellingPrice),
+    priceLabel: money(sellingPrice)
+  }));
+
+  return (
+    <VehicleInvoiceForm
+      mode="edit"
+      invoiceId={invoice.id}
+      vehicleId={invoice.vehicleId}
+      vehicleName={invoice.vehicle.nameOrNumber}
+      shops={shops}
+      stockRows={serializedStockRows}
+      defaultShopId={invoice.shopId}
+      defaultInvoiceDate={selectedInvoiceDate}
+      maxInvoiceDate={today}
+      dateChangePath={`/invoices/${invoice.id}/edit`}
+      initialItems={invoice.items.map((item) => ({ batchId: item.batchId, quantity: item.quantity }))}
+    />
   );
 }

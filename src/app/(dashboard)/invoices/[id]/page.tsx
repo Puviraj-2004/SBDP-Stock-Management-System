@@ -1,15 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
-import { Badge, Button, Field, Input, LinkButton, PageHeader, Panel, Select, Table, TextArea } from "@/components/ui";
-import {
-  clearChequeAction,
-  createPaymentAction,
-  deleteInvoiceAction,
-  deletePaymentAction,
-  markInvoicePaidAction,
-  updatePaymentAction
-} from "@/lib/actions";
+import { InvoicePaymentSection } from "@/components/InvoicePaymentPanel";
+import { Badge, LinkButton, PageHeader, Panel, Table } from "@/components/ui";
+import { deleteInvoiceAction } from "@/lib/actions";
 import { getInvoicePaidAmount } from "@/lib/balance";
 import { prisma } from "@/lib/db";
 import { displayDate, money, startOfToday, toDateInputValue } from "@/lib/dates";
@@ -20,9 +13,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     where: { id },
     include: {
       shop: true,
-      trip: { include: { vehicle: true } },
-      items: { include: { product: { include: { supplier: true } } } },
-      allocations: { include: { payment: true }, orderBy: { createdAt: "desc" } }
+      vehicle: true,
+      items: { include: { product: { include: { supplier: true } }, batch: true } },
+      allocations: { include: { payment: true }, orderBy: { createdAt: "desc" } },
+      payments: { orderBy: { createdAt: "desc" } }
     }
   });
   if (!invoice) notFound();
@@ -30,6 +24,36 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const paid = await getInvoicePaidAmount(invoice.id);
   const remaining = Math.max(0, Number(invoice.totalAmount) - paid);
   const isOpeningInvoice = invoice.invoiceType === "opening";
+  const paymentRows = invoice.allocations.map((allocation) => ({
+    allocationId: allocation.id,
+    appliedAmount: String(allocation.amount),
+    payment: {
+      id: allocation.payment.id,
+      paymentDate: toDateInputValue(allocation.payment.paymentDate),
+      method: allocation.payment.method,
+      amount: String(allocation.payment.amount),
+      chequeNumber: allocation.payment.chequeNumber ?? "",
+      chequeStatus: (allocation.payment.chequeStatus === "pending" || allocation.payment.chequeStatus === "cleared" ? allocation.payment.chequeStatus : "") as "" | "pending" | "cleared",
+      notes: allocation.payment.notes ?? ""
+    }
+  }));
+  const allocatedPaymentIds = new Set(paymentRows.map((row) => row.payment.id));
+  const directPaymentRows = invoice.payments
+    .filter((payment) => !allocatedPaymentIds.has(payment.id))
+    .map((payment) => ({
+      allocationId: `payment-${payment.id}`,
+      appliedAmount: "0",
+      payment: {
+        id: payment.id,
+        paymentDate: toDateInputValue(payment.paymentDate),
+        method: payment.method,
+        amount: String(payment.amount),
+        chequeNumber: payment.chequeNumber ?? "",
+        chequeStatus: (payment.chequeStatus === "pending" || payment.chequeStatus === "cleared" ? payment.chequeStatus : "") as "" | "pending" | "cleared",
+        notes: payment.notes ?? ""
+      }
+    }));
+  const visiblePaymentRows = [...paymentRows, ...directPaymentRows];
 
   return (
     <>
@@ -51,7 +75,13 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </div>
         }
       />
-      <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
+      <InvoicePaymentSection
+        shopId={invoice.shopId}
+        invoiceId={invoice.id}
+        remainingAmount={remaining > 0 ? String(remaining) : ""}
+        today={toDateInputValue(startOfToday())}
+        payments={visiblePaymentRows}
+      >
         <Panel>
           <div className="mb-3 flex items-center gap-2">
             <h2 className="font-semibold">{isOpeningInvoice ? "Old invoice details" : "Line items"}</h2>
@@ -83,89 +113,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   <td className="px-3 py-2 tabular">{money(invoice.totalAmount)}</td>
                 </tr>
               </Table>
-              {invoice.trip ? (
+              {invoice.vehicle ? (
                 <p className="mt-3 text-sm text-muted">
-                  Linked trip: {displayDate(invoice.trip.tripDate)} - {invoice.trip.vehicle.nameOrNumber}
+                  Vehicle: {invoice.vehicle.nameOrNumber}
                 </p>
               ) : null}
             </>
           )}
         </Panel>
-
-        <Panel>
-          <h2 className="mb-3 font-semibold">Payment</h2>
-          {remaining > 0 ? (
-            <form action={markInvoicePaidAction} className="mb-4">
-              <input type="hidden" name="invoiceId" value={invoice.id} />
-              <Button type="submit" className="w-full">Mark as paid by cash</Button>
-            </form>
-          ) : null}
-          <form action={createPaymentAction} className="grid gap-3">
-            <input type="hidden" name="shopId" value={invoice.shopId} />
-            <input type="hidden" name="invoiceId" value={invoice.id} />
-            <Field label="Date"><Input name="paymentDate" type="date" defaultValue={toDateInputValue(startOfToday())} required /></Field>
-            <Field label="Amount"><Input name="amount" type="number" min="0" step="0.01" defaultValue={remaining || ""} required /></Field>
-            <Field label="Method"><Select name="method" required><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="cheque">Cheque</option></Select></Field>
-            <Field label="Cheque number"><Input name="chequeNumber" /></Field>
-            <Field label="Cheque status"><Select name="chequeStatus"><option value="pending">Pending</option><option value="cleared">Cleared</option></Select></Field>
-            <Field label="Notes"><TextArea name="notes" /></Field>
-            <Button type="submit">Record payment</Button>
-          </form>
-        </Panel>
-      </div>
-
-      <Panel className="mt-5">
-        <h2 className="mb-3 font-semibold">Linked payments</h2>
-        <Table headers={["Date", "Method", "Payment", "Applied", "Cheque", "Notes", "Action"]}>
-          {invoice.allocations.map((allocation) => {
-            const payment = allocation.payment;
-            return (
-              <tr key={allocation.id}>
-                <td className="px-3 py-2 tabular">
-                  <form id={`payment-${payment.id}`} action={updatePaymentAction} className="grid gap-2">
-                    <input type="hidden" name="paymentId" value={payment.id} />
-                    <Input name="paymentDate" type="date" defaultValue={toDateInputValue(payment.paymentDate)} className="h-9" required />
-                  </form>
-                </td>
-                <td className="px-3 py-2">
-                  <Select name="method" form={`payment-${payment.id}`} defaultValue={payment.method} className="h-9">
-                    <option value="cash">Cash</option>
-                    <option value="bank_transfer">Bank transfer</option>
-                    <option value="cheque">Cheque</option>
-                  </Select>
-                </td>
-                <td className="px-3 py-2 tabular"><Input name="amount" form={`payment-${payment.id}`} type="number" min="0" step="0.01" defaultValue={String(payment.amount)} className="h-9 w-28" required /></td>
-                <td className="px-3 py-2 tabular">{money(allocation.amount)}</td>
-                <td className="px-3 py-2">
-                  <div className="grid gap-2">
-                    <Input name="chequeNumber" form={`payment-${payment.id}`} defaultValue={payment.chequeNumber ?? ""} placeholder="No." className="h-9" />
-                    <Select name="chequeStatus" form={`payment-${payment.id}`} defaultValue={payment.chequeStatus ?? "pending"} className="h-9">
-                      <option value="pending">Pending</option>
-                      <option value="cleared">Cleared</option>
-                    </Select>
-                  </div>
-                </td>
-                <td className="px-3 py-2"><Input name="notes" form={`payment-${payment.id}`} defaultValue={payment.notes ?? ""} className="h-9" /></td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-2">
-                    <Button form={`payment-${payment.id}`} type="submit" variant="secondary" className="h-9">Save</Button>
-                    {payment.method === "cheque" && payment.chequeStatus === "pending" ? (
-                      <form action={clearChequeAction}>
-                        <input type="hidden" name="paymentId" value={payment.id} />
-                        <Button type="submit" variant="secondary" className="h-9">Clear</Button>
-                      </form>
-                    ) : null}
-                    <form action={deletePaymentAction}>
-                      <input type="hidden" name="paymentId" value={payment.id} />
-                      <ConfirmSubmitButton type="submit" message="Delete this full payment and all invoice allocations?" className="h-9">Delete</ConfirmSubmitButton>
-                    </form>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </Table>
-      </Panel>
+      </InvoicePaymentSection>
     </>
   );
 }

@@ -12,78 +12,22 @@ export async function GET(request: Request) {
 
   return workbookResponse(`daily-report-${report.selected}.xlsx`, [
     {
-      name: "Summary",
-      columns: ["Metric", "Value"],
+      name: "Daily Report",
+      title: `Daily Report - ${displayDate(report.selected)}`,
+      columns: ["Section", "Metric", "Value"],
       rows: [
-        ["Date", displayDate(report.selected)],
-        ["Sales", money(report.totals.invoiceValue)],
-        ["Collections", money(report.totals.countedPaymentValue)],
-        ["Trips", report.totals.trips],
-        ["Open Trips", report.totals.openTrips],
-        ["Closed Trips", report.totals.closedTrips],
-        ["Units Loaded", report.totals.loaded],
-        ["Units Returned", report.totals.returned],
-        ["Expected Sold", report.totals.expectedSold],
-        ["Invoices", report.totals.invoices],
-        ["Payments", report.totals.payments],
-        ["Pending Cheques", money(report.totals.pendingChequeValue)],
-        ["Net Outstanding", money(report.totals.totalOutstanding)]
+        ["Summary", "Total Sales", money(report.totals.sales)],
+        ["Summary", "Gross Profit", money(report.totals.profit)],
+        ["Summary", "Payments Received", money(report.totals.paymentsReceived)],
+        ["Summary", "Units Loaded", report.totals.loadedUnits],
+        ["Summary", "Vehicles Loaded", report.totals.loadedVehicles],
+        ["Summary", "Units Sold", report.totals.soldUnits],
+        ["Summary", "Units Returned", report.totals.returnedUnits],
+        ["Summary", "New Pending Cheques", money(report.totals.pendingChequeValue)],
+        ...report.vehicleRows.map((row) => ["Vehicle", `${row.vehicle} loaded/sold/returned/balance`, `${row.loaded} / ${row.sold} / ${row.returned} / ${row.currentBalance}`]),
+        ...report.invoices.map((invoice) => ["Invoice", `${invoice.shop} - ${invoice.vehicle}`, `${money(invoice.amount)} - ${invoice.status}`]),
+        ...report.payments.map((payment) => ["Payment", `${payment.shop} - ${payment.method.replace("_", " ")}`, money(payment.amount)])
       ]
-    },
-    {
-      name: "Trips",
-      columns: ["Vehicle", "Supplier", "Loaded", "Returned", "Expected Sold", "Invoices", "Invoice Value", "Status", "Mismatch Count"],
-      rows: report.trips.map((trip) => [
-        trip.vehicle,
-        trip.supplier,
-        trip.loaded,
-        trip.returned,
-        trip.expectedSold,
-        trip.invoiceCount,
-        trip.invoiceValue,
-        trip.status,
-        trip.mismatchCount
-      ])
-    },
-    {
-      name: "Stock Received",
-      columns: ["Product", "Measurement", "Supplier", "Qty", "Received Date", "Expiry Date"],
-      rows: report.stockReceived.map((batch) => [
-        batch.product.name,
-        batch.product.measurement,
-        batch.product.supplier.name,
-        batch.quantity,
-        displayDate(batch.receivedDate),
-        displayDate(batch.expiryDate)
-      ])
-    },
-    {
-      name: "Invoices",
-      columns: ["Invoice Date", "Shop", "Products", "Total", "Status"],
-      rows: report.invoices.map((invoice) => [
-        displayDate(invoice.invoiceDate),
-        invoice.shop.name,
-        invoice.items.map((item) => item.product.name).join(", "),
-        Number(invoice.totalAmount),
-        invoice.paidStatus
-      ])
-    },
-    {
-      name: "Payments",
-      columns: ["Payment Date", "Shop", "Method", "Amount", "Cheque Status", "Allocated Amount"],
-      rows: report.payments.map((payment) => [
-        displayDate(payment.paymentDate),
-        payment.shop.name,
-        payment.method.replace("_", " "),
-        Number(payment.amount),
-        payment.method === "cheque" ? payment.chequeStatus ?? "" : "",
-        payment.allocations.reduce((sum, allocation) => sum + Number(allocation.amount), 0)
-      ])
-    },
-    {
-      name: "Alerts",
-      columns: ["Severity", "Message", "Info"],
-      rows: report.alerts.map((alert) => [alert.severity, alert.message, alert.meta])
     }
   ]);
 }

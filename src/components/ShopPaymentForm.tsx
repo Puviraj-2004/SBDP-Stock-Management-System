@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { createPaymentAction } from "@/lib/actions";
+import { DatePickerInput } from "@/components/DatePickerInput";
+import { createPaymentFormAction } from "@/lib/actions";
 import { Button, Field, Input, Select, Table, TextArea } from "@/components/ui";
 
 type InvoiceOption = {
@@ -26,12 +27,17 @@ export function ShopPaymentForm({
   invoices: InvoiceOption[];
 }) {
   const [open, setOpen] = useState(false);
+  const [actionState, formAction, isPending] = useActionState(createPaymentFormAction, {});
+
+  useEffect(() => {
+    if (actionState.ok) setOpen(false);
+  }, [actionState.ok]);
 
   return (
-    <form action={createPaymentAction} className="grid gap-3" onSubmit={() => setOpen(false)}>
+    <form action={formAction} className="grid gap-3">
       <input type="hidden" name="shopId" value={shopId} />
       <Field label="Date">
-        <Input name="paymentDate" type="date" defaultValue={today} required />
+        <DatePickerInput name="paymentDate" defaultValue={today} maxDate={today} required />
       </Field>
       <Field label="Amount">
         <Input name="amount" type="number" min="0" step="0.01" defaultValue={defaultAmount} required />
@@ -89,8 +95,13 @@ export function ShopPaymentForm({
             )}
 
             <div className="mt-5 flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit">Confirm payment</Button>
+              {actionState.message ? (
+                <div className={`mr-auto rounded-md p-3 text-sm ${actionState.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>
+                  {actionState.message}
+                </div>
+              ) : null}
+              <Button type="button" variant="secondary" onClick={() => setOpen(false)} disabled={isPending}>Cancel</Button>
+              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : "Confirm payment"}</Button>
             </div>
           </div>
         </div>

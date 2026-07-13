@@ -28,6 +28,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
               </Select>
             </Field>
             <Field label="Selling price"><Input name="sellingPrice" type="number" min="0" step="0.01" defaultValue={String(product.sellingPrice)} required /></Field>
+            <Field label="MRP"><Input name="mrp" type="number" min="0" step="0.01" defaultValue={product.mrp ? String(product.mrp) : ""} /></Field>
             <Field label="Product name"><Input name="name" defaultValue={product.name} required /></Field>
             <Field label="Measurement"><Input name="measurement" defaultValue={product.measurement} required /></Field>
             <Field label="Barcode"><Input name="barcode" defaultValue={product.barcode ?? ""} /></Field>

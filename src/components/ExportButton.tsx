@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Download } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -12,7 +11,7 @@ export function ExportButton({
   className?: string;
 }) {
   return (
-    <Link
+    <a
       href={href}
       className={clsx(
         "inline-flex h-10 items-center justify-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink transition hover:bg-[#eeebe4]",
@@ -21,6 +20,6 @@ export function ExportButton({
     >
       <Download size={16} />
       {children}
-    </Link>
+    </a>
   );
 }
