@@ -8,7 +8,10 @@ export async function GET(request: Request) {
   if (unauthorized) return unauthorized;
 
   const url = new URL(request.url);
-  const report = await getDailyProgress(url.searchParams.get("date") ?? undefined);
+  const report = await getDailyProgress(
+    url.searchParams.get("date") ?? undefined,
+    url.searchParams.get("supplierId") ?? undefined
+  );
 
   return workbookResponse(`daily-report-${report.selected}.xlsx`, [
     {
@@ -16,8 +19,9 @@ export async function GET(request: Request) {
       title: `Daily Report - ${displayDate(report.selected)}`,
       columns: ["Section", "Metric", "Value"],
       rows: [
-        ["Summary", "Total Sales", money(report.totals.sales)],
+        ["Summary", "Sales Revenue", money(report.totals.sales)],
         ["Summary", "Gross Profit", money(report.totals.profit)],
+        ...(!report.isSupplierFiltered ? [["Summary", "Old Balance Added", money(report.totals.openingBalanceAdded)]] : []),
         ["Summary", "Payments Received", money(report.totals.paymentsReceived)],
         ["Summary", "Units Loaded", report.totals.loadedUnits],
         ["Summary", "Vehicles Loaded", report.totals.loadedVehicles],

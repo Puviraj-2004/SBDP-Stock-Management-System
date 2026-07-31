@@ -8,7 +8,10 @@ export async function GET(request: Request) {
   if (unauthorized) return unauthorized;
 
   const url = new URL(request.url);
-  const report = await getMonthlyProgress(url.searchParams.get("month"));
+  const report = await getMonthlyProgress(
+    url.searchParams.get("month"),
+    url.searchParams.get("supplierId") ?? undefined
+  );
 
   return workbookResponse(`monthly-report-${report.selected}.xlsx`, [
     {
@@ -19,6 +22,7 @@ export async function GET(request: Request) {
       rows: [
         ["Sales Revenue", money(report.totals.sales), `${report.comparisons.sales.toFixed(1)}%`],
         ["Gross Profit", money(report.totals.profit), `${report.comparisons.profit.toFixed(1)}%`],
+        ...(!report.isSupplierFiltered ? [["Old Balance Added", money(report.totals.openingBalanceAdded), `${report.comparisons.openingBalanceAdded.toFixed(1)}%`]] : []),
         ["Payments Collected", money(report.totals.paymentsReceived), `${report.comparisons.paymentsReceived.toFixed(1)}%`],
         ["Outstanding Change", money(report.totals.outstandingChange), `${report.comparisons.outstandingChange.toFixed(1)}%`],
         ["Units Sold", report.totals.soldUnits, `${report.comparisons.soldUnits.toFixed(1)}%`],
@@ -38,7 +42,7 @@ export async function GET(request: Request) {
     },
     {
       name: "Top Shops",
-      columns: ["Shop", "Invoice Total", "Payments Received"],
+      columns: ["Shop", "Sale Invoice Total", "Payments Received"],
       rows: report.shopRows.map((shop) => [shop.shop, shop.invoiceTotal, shop.paymentsReceived])
     },
     {

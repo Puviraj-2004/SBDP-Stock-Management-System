@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 
@@ -44,6 +44,7 @@ export function DatePickerInput({
   defaultValue = "",
   maxDate,
   required = false,
+  disabled = false,
   className,
   onDateChange,
   ariaLabel
@@ -52,6 +53,7 @@ export function DatePickerInput({
   defaultValue?: string;
   maxDate?: string;
   required?: boolean;
+  disabled?: boolean;
   className?: string;
   onDateChange?: (isoDate: string) => void;
   ariaLabel?: string;
@@ -65,6 +67,11 @@ export function DatePickerInput({
   const [visibleMonth, setVisibleMonth] = useState(initialMonth);
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    setDisplayValue(isoToDisplay(defaultValue));
+    setVisibleMonth(initialMonth);
+  }, [defaultValue, initialMonth]);
+
   const parsedIsoValue = displayToIso(displayValue);
   const isoValue = maxDate && parsedIsoValue > maxDate ? "" : parsedIsoValue;
   const year = visibleMonth.getUTCFullYear();
@@ -73,6 +80,7 @@ export function DatePickerInput({
   const monthDays = daysInMonth(year, month);
 
   function chooseDate(day: number) {
+    if (disabled) return;
     const nextIso = [
       year,
       String(month + 1).padStart(2, "0"),
@@ -95,6 +103,7 @@ export function DatePickerInput({
           aria-label={ariaLabel}
           value={displayValue}
           onChange={(event) => {
+            if (disabled) return;
             setDisplayValue(event.target.value);
             const nextIso = displayToIso(event.target.value);
             onDateChange?.(maxDate && nextIso > maxDate ? "" : nextIso);
@@ -102,9 +111,10 @@ export function DatePickerInput({
           placeholder="dd/mm/yyyy"
           pattern="\d{2}/\d{2}/\d{4}"
           required={required}
+          disabled={disabled}
           className={className}
         />
-        <Button type="button" variant="secondary" className="h-10 w-10 px-0" onClick={() => setOpen((current) => !current)} aria-label="Open calendar">
+        <Button type="button" variant="secondary" className="h-10 w-10 px-0" onClick={() => setOpen((current) => !current)} aria-label="Open calendar" disabled={disabled}>
           <Calendar size={16} />
         </Button>
       </div>

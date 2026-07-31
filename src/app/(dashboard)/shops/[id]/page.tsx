@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Eye } from "lucide-react";
 import { notFound } from "next/navigation";
-import { ExportButton } from "@/components/ExportButton";
 import { Badge, Button, LinkButton, PageHeader, Panel, Table } from "@/components/ui";
 import { ShopBalanceCard } from "@/components/ShopBalanceCard";
 import { clearChequeAction } from "@/lib/actions";
@@ -33,7 +32,6 @@ export default async function ShopDetailPage({ params }: { params: Promise<{ id:
         description={[shop.contactNumber, shop.address].filter(Boolean).join(" · ") || "Shop account"}
         action={
           <div className="flex flex-wrap gap-2">
-            <ExportButton href={`/api/exports/shops/${shop.id}`}>Export Statement</ExportButton>
             <LinkButton href={`/invoices/new?type=old&shopId=${shop.id}`} variant="secondary">Add old invoice</LinkButton>
             <LinkButton href={`/shops/${shop.id}/edit`} variant="secondary">Edit shop</LinkButton>
           </div>

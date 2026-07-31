@@ -1,21 +1,29 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui";
 
-export function MonthFilter({ value }: { value: string }) {
-  const router = useRouter();
+export function MonthFilter({ value, supplierId = "" }: { value: string; supplierId?: string }) {
+  const [selected, setSelected] = useState(value);
+
+  useEffect(() => {
+    setSelected(value);
+  }, [value]);
 
   return (
     <Input
       aria-label="Pick a month"
       name="month"
       type="month"
-      defaultValue={value}
+      value={selected}
       className="report-date-input"
       onChange={(event) => {
-        if (event.target.value) {
-          router.push(`/reports/monthly?month=${event.target.value}`);
+        const nextMonth = event.target.value;
+        setSelected(nextMonth);
+        if (nextMonth) {
+          const params = new URLSearchParams({ month: nextMonth });
+          if (supplierId) params.set("supplierId", supplierId);
+          window.location.assign(`/reports/monthly?${params.toString()}`);
         }
       }}
     />

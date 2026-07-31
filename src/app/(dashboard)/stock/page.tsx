@@ -1,5 +1,4 @@
 import { StockTable } from "@/components/StockTable";
-import { ExportButton } from "@/components/ExportButton";
 import { PaginationControls } from "@/components/PaginationControls";
 import { LinkButton, PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
@@ -55,7 +54,6 @@ export default async function StockPage({
         description={`${batches.length} batches shown - ${totalUnits} units total`}
         action={
           <div className="flex flex-wrap gap-2">
-            <ExportButton href="/api/exports/stock">Export Excel</ExportButton>
             <LinkButton href="/stock/receive">Receive stock</LinkButton>
           </div>
         }

@@ -3,7 +3,6 @@ import { Prisma } from "@prisma/client";
 import { Edit, Eye, Trash2 } from "lucide-react";
 import { BarcodeScanInput } from "@/components/BarcodeScanInput";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
-import { ExportButton } from "@/components/ExportButton";
 import { PaginationControls } from "@/components/PaginationControls";
 import { ProductCreateDialog } from "@/components/ProductCreateDialog";
 import { PageHeader, Panel, Table } from "@/components/ui";
@@ -56,7 +55,6 @@ export default async function ProductsPage({
         description="Products are unique by name, measurement, and supplier."
         action={
           <div className="flex flex-wrap gap-2">
-            <ExportButton href="/api/exports/products">Export Excel</ExportButton>
             <ProductCreateDialog suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))} />
           </div>
         }

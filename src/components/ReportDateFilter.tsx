@@ -1,19 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { DatePickerInput } from "@/components/DatePickerInput";
 
-export function ReportDateFilter({ value }: { value: string }) {
-  const router = useRouter();
-
+export function ReportDateFilter({ value, supplierId = "" }: { value: string; supplierId?: string }) {
   return (
     <DatePickerInput
-      aria-label="Pick a date"
+      ariaLabel="Pick a date"
       name="date"
       defaultValue={value}
       className="report-date-input"
       onDateChange={(date) => {
-        if (date) router.push(`/reports/daily?date=${date}`);
+        if (!date) return;
+        const params = new URLSearchParams({ date });
+        if (supplierId) params.set("supplierId", supplierId);
+        window.location.assign(`/reports/daily?${params.toString()}`);
       }}
     />
   );

@@ -89,7 +89,9 @@ export const invoiceSchema = z.object({
   items: z.array(
     z.object({
       batchId: z.string().min(1),
-      quantity: positiveInt
+      quantity: positiveInt,
+      discountType: z.enum(["none", "amount", "percentage"]).default("none"),
+      discountValue: z.coerce.number().min(0).default(0)
     })
   ).min(1)
 }).superRefine((value, ctx) => {

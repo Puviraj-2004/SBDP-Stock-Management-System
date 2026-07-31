@@ -7,6 +7,13 @@ import { getInvoicePaidAmount } from "@/lib/balance";
 import { prisma } from "@/lib/db";
 import { displayDate, money, startOfToday, toDateInputValue } from "@/lib/dates";
 
+function discountLabel(type: string, value: unknown) {
+  const amount = Number(value ?? 0);
+  if (type === "amount") return money(amount);
+  if (type === "percentage") return `${amount}%`;
+  return "-";
+}
+
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const invoice = await prisma.invoice.findUnique({
@@ -98,18 +105,19 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </div>
           ) : (
             <>
-              <Table headers={["Product", "Supplier", "Qty", "Unit", "Line total"]}>
+              <Table headers={["Product", "Supplier", "Qty", "Unit", "Discount", "Line total"]}>
                 {invoice.items.map((item) => (
                   <tr key={item.id}>
                     <td className="px-3 py-2">{item.product.name} {item.product.measurement}</td>
                     <td className="px-3 py-2">{item.product.supplier.name}</td>
                     <td className="px-3 py-2 tabular">{item.quantity}</td>
                     <td className="px-3 py-2 tabular">{money(item.unitPrice)}</td>
+                    <td className="px-3 py-2 tabular">{discountLabel(item.discountType, item.discountValue)}</td>
                     <td className="px-3 py-2 tabular">{money(item.lineTotal)}</td>
                   </tr>
                 ))}
                 <tr className="bg-[#ebe7dd] font-semibold">
-                  <td className="px-3 py-2" colSpan={4}>Total</td>
+                  <td className="px-3 py-2" colSpan={5}>Total</td>
                   <td className="px-3 py-2 tabular">{money(invoice.totalAmount)}</td>
                 </tr>
               </Table>

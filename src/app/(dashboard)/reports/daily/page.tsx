@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Banknote, Eye, PackageCheck, Receipt, RotateCcw, TrendingUp, Truck } from "lucide-react";
-import { ExportButton } from "@/components/ExportButton";
 import { ReportDateFilter } from "@/components/ReportDateFilter";
+import { ReportSupplierFilter } from "@/components/ReportSupplierFilter";
 import { getDailyProgress } from "@/lib/dailyReport";
 import { displayDate, money, startOfToday, toDateInputValue } from "@/lib/dates";
+import { prisma } from "@/lib/db";
 
 function SummaryCard({ icon, label, value, note }: { icon: React.ReactNode; label: string; value: React.ReactNode; note: string }) {
   return (
@@ -28,20 +29,33 @@ function methodLabel(method: string) {
 export default async function DailyReportPage({
   searchParams
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; supplierId?: string }>;
 }) {
-  const { date } = await searchParams;
-  const report = await getDailyProgress(date);
+  const { date, supplierId } = await searchParams;
+  const [report, suppliers] = await Promise.all([
+    getDailyProgress(date, supplierId),
+    prisma.supplier.findMany({ orderBy: { name: "asc" } })
+  ]);
   const today = toDateInputValue(startOfToday());
 
   return (
     <div className="report-page">
       <div className="report-date-bar report-day-bar">
-        <div className="report-date-title">Daily report - {report.selected === today ? "Today" : displayDate(report.selected)}</div>
-        <div className="report-date-picker">
-          <ReportDateFilter value={report.selected} />
+        <div className="report-date-title">
+          Daily report - {report.selected === today ? "Today" : displayDate(report.selected)}
+          {report.supplier ? ` - ${report.supplier.name}` : ""}
         </div>
-        <ExportButton href={`/api/exports/reports/daily?date=${report.selected}`} className="report-export-button">Export Excel</ExportButton>
+        <div className="report-date-picker">
+          <ReportDateFilter value={report.selected} supplierId={report.supplier?.id} />
+        </div>
+        <div className="report-date-picker">
+          <ReportSupplierFilter
+            mode="daily"
+            date={report.selected}
+            suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
+            selectedSupplierId={report.supplier?.id}
+          />
+        </div>
       </div>
 
       {!report.hasActivity ? (
@@ -49,14 +63,51 @@ export default async function DailyReportPage({
       ) : (
         <>
           <div className="report-summary-grid">
-            <SummaryCard icon={<Receipt size={20} />} label="Total sales" value={money(report.totals.sales)} note={`${report.totals.invoiceCount} invoices`} />
+            <SummaryCard icon={<Receipt size={20} />} label="Sales revenue" value={money(report.totals.sales)} note={`${report.totals.invoiceCount} sale invoices`} />
             <SummaryCard icon={<TrendingUp size={20} />} label="Gross profit" value={money(report.totals.profit)} note="selling price - batch cost" />
-            <SummaryCard icon={<Banknote size={20} />} label="Payments received" value={money(report.totals.paymentsReceived)} note="cash, bank, cleared cheques" />
+            {!report.isSupplierFiltered ? (
+              <SummaryCard icon={<Receipt size={20} />} label="Old balance added" value={money(report.totals.openingBalanceAdded)} note={`${report.totals.oldInvoiceCount} old invoices`} />
+            ) : null}
+            <SummaryCard icon={<Banknote size={20} />} label="Payments received" value={money(report.totals.paymentsReceived)} note={report.isSupplierFiltered ? "overall payments" : "cash, bank, cleared cheques"} />
             <SummaryCard icon={<Truck size={20} />} label="Units loaded" value={report.totals.loadedUnits} note={`across ${report.totals.loadedVehicles} vehicles`} />
             <SummaryCard icon={<PackageCheck size={20} />} label="Units sold" value={report.totals.soldUnits} note="from invoices today" />
             <SummaryCard icon={<RotateCcw size={20} />} label="Units returned" value={report.totals.returnedUnits} note="back to warehouse" />
             <SummaryCard icon={<Banknote size={20} />} label="New pending cheques" value={money(report.totals.pendingChequeValue)} note="not realized yet" />
           </div>
+
+          {report.isSupplierFiltered ? (
+            <section className="report-section">
+              <div className="report-section-header">
+                <span className="report-section-title">Supplier product details</span>
+              </div>
+              <div className="report-section-body">
+                <table className="report-table">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th className="right">Loaded</th>
+                      <th className="right">Sold</th>
+                      <th className="right">Returned</th>
+                      <th className="right">Revenue</th>
+                      <th className="right">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.productRows.map((product) => (
+                      <tr key={product.productId}>
+                        <td><Link href={`/products/${product.productId}`} className="report-cell-link strong">{product.product}</Link></td>
+                        <td className="right">{product.loaded}</td>
+                        <td className="right">{product.sold}</td>
+                        <td className={`right ${product.returned > 0 ? "danger-text" : ""}`}>{product.returned}</td>
+                        <td className="right strong">{money(product.revenue)}</td>
+                        <td className="right">{money(product.profit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
           <section className="report-section">
             <div className="report-section-header">
@@ -104,6 +155,7 @@ export default async function DailyReportPage({
                 <thead>
                   <tr>
                     <th>Shop</th>
+                    <th>Source</th>
                     <th>Vehicle</th>
                     <th className="right">Amount</th>
                     <th>Status</th>
@@ -114,6 +166,7 @@ export default async function DailyReportPage({
                   {report.invoices.slice(0, 6).map((invoice) => (
                     <tr key={invoice.id}>
                       <td className="strong">{invoice.shop}</td>
+                      <td>{invoice.invoiceType === "opening" ? "Old invoice" : "Sale invoice"}</td>
                       <td>{invoice.vehicle}</td>
                       <td className="right strong">{money(invoice.amount)}</td>
                       <td><StatusBadge status={invoice.status} /></td>

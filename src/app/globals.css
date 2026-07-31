@@ -90,11 +90,27 @@ button {
 }
 
 .report-date-picker {
-  width: 160px;
+  min-width: 160px;
+  width: 220px;
 }
 
 .report-date-input {
   height: 36px;
+}
+
+.report-supplier-filter {
+  position: relative;
+}
+
+.report-filter-loading {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: 12px;
+  pointer-events: none;
 }
 
 .report-export-button {

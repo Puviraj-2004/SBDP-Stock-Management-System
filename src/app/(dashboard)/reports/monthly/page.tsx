@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Banknote, PackageCheck, RotateCcw, TrendingUp, Truck } from "lucide-react";
-import { ExportButton } from "@/components/ExportButton";
 import { MonthFilter } from "@/components/MonthFilter";
+import { ReportSupplierFilter } from "@/components/ReportSupplierFilter";
+import { prisma } from "@/lib/db";
 import { getMonthlyProgress } from "@/lib/monthlyReport";
 import { displayDate, money } from "@/lib/dates";
 
@@ -47,26 +48,42 @@ function maxTrendValue(rows: { sales: number }[]) {
 export default async function MonthlyReportPage({
   searchParams
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; supplierId?: string }>;
 }) {
-  const { month } = await searchParams;
-  const report = await getMonthlyProgress(month);
+  const { month, supplierId } = await searchParams;
+  const [report, suppliers] = await Promise.all([
+    getMonthlyProgress(month, supplierId),
+    prisma.supplier.findMany({ orderBy: { name: "asc" } })
+  ]);
   const maxSales = maxTrendValue(report.dailyTrend);
 
   return (
     <div className="report-page">
       <div className="report-date-bar report-month-bar">
-        <div className="report-date-title">Monthly report - {report.label}</div>
-        <div className="report-date-picker">
-          <MonthFilter value={report.selected} />
+        <div className="report-date-title">
+          Monthly report - {report.label}
+          {report.supplier ? ` - ${report.supplier.name}` : ""}
         </div>
-        <ExportButton href={`/api/exports/reports/month?month=${report.selected}`} className="report-export-button">Export Excel</ExportButton>
+        <div className="report-date-picker">
+          <MonthFilter value={report.selected} supplierId={report.supplier?.id} />
+        </div>
+        <div className="report-date-picker">
+          <ReportSupplierFilter
+            mode="monthly"
+            month={report.selected}
+            suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
+            selectedSupplierId={report.supplier?.id}
+          />
+        </div>
       </div>
 
       <div className="report-summary-grid">
         <SummaryCard icon={<TrendingUp size={20} />} label="Sales revenue" value={money(report.totals.sales)} comparison={report.comparisons.sales} />
         <SummaryCard icon={<TrendingUp size={20} />} label="Gross profit" value={money(report.totals.profit)} comparison={report.comparisons.profit} />
-        <SummaryCard icon={<Banknote size={20} />} label="Payments collected" value={money(report.totals.paymentsReceived)} comparison={report.comparisons.paymentsReceived} />
+        {!report.isSupplierFiltered ? (
+          <SummaryCard icon={<Banknote size={20} />} label="Old balance added" value={money(report.totals.openingBalanceAdded)} comparison={report.comparisons.openingBalanceAdded} />
+        ) : null}
+        <SummaryCard icon={<Banknote size={20} />} label={report.isSupplierFiltered ? "Payments collected overall" : "Payments collected"} value={money(report.totals.paymentsReceived)} comparison={report.comparisons.paymentsReceived} />
         <SummaryCard icon={<Banknote size={20} />} label="Outstanding change" value={money(report.totals.outstandingChange)} comparison={report.comparisons.outstandingChange} favorableWhenDown />
         <SummaryCard icon={<PackageCheck size={20} />} label="Units sold" value={report.totals.soldUnits} comparison={report.comparisons.soldUnits} />
         <SummaryCard icon={<Truck size={20} />} label="Units loaded" value={report.totals.loadedUnits} comparison={report.comparisons.loadedUnits} />
@@ -136,7 +153,7 @@ export default async function MonthlyReportPage({
             <thead>
               <tr>
                 <th>Shop</th>
-                <th className="right">Invoice total</th>
+                <th className="right">Sale invoice total</th>
                 <th className="right">Payments received</th>
               </tr>
             </thead>

@@ -59,15 +59,67 @@ function getInvoiceItemsFromForm(formData: FormData) {
       return {
         index: Number(index),
         batchId: String(formData.get(`batch-${index}`) ?? ""),
-        quantity: Number(formData.get(`quantity-${index}`) ?? 0)
+        quantity: Number(formData.get(`quantity-${index}`) ?? 0),
+        discountType: String(formData.get(`discountType-${index}`) ?? "none"),
+        discountValue: Number(formData.get(`discountValue-${index}`) ?? 0)
       };
     })
-    .filter((row): row is { index: number; batchId: string; quantity: number } => Boolean(row))
+    .filter((row): row is { index: number; batchId: string; quantity: number; discountType: string; discountValue: number } => Boolean(row))
     .sort((a, b) => a.index - b.index)
-    .map(({ batchId, quantity }) => ({ batchId, quantity }))
+    .map(({ batchId, quantity, discountType, discountValue }) => ({
+      batchId,
+      quantity,
+      discountType,
+      discountValue
+    }))
     .filter((row) => row.batchId && row.quantity > 0);
 
   return rows;
+}
+
+function normalizedDiscountType(value: string) {
+  return value === "amount" || value === "percentage" ? value : "none";
+}
+
+function normalizedDiscountValue(discountType: string, value: number) {
+  return discountType === "none" ? 0 : Math.max(0, value);
+}
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function calculateDiscountedLineTotal({
+  unitPrice,
+  quantity,
+  discountType,
+  discountValue,
+  productName
+}: {
+  unitPrice: number;
+  quantity: number;
+  discountType: string;
+  discountValue: number;
+  productName: string;
+}) {
+  const subtotal = unitPrice * quantity;
+
+  if (discountType === "amount" && discountValue > subtotal) {
+    throw new Error(`Discount cannot be more than product total for ${productName}`);
+  }
+
+  if (discountType === "percentage" && discountValue > 100) {
+    throw new Error(`Discount percentage cannot be more than 100 for ${productName}`);
+  }
+
+  const finalLineTotal =
+    discountType === "amount"
+      ? subtotal - discountValue
+      : discountType === "percentage"
+        ? subtotal - (subtotal * discountValue) / 100
+        : subtotal;
+
+  return roundMoney(Math.max(0, finalLineTotal));
 }
 
 function getReturnItemsFromForm(formData: FormData) {
@@ -108,6 +160,16 @@ async function getVehicleBatchBalances(
   });
 
   return new Map(rows.map((row) => [row.batchId, row._sum.quantityChange ?? 0]));
+}
+
+async function getVehicleBatchBalance(
+  tx: Prisma.TransactionClient,
+  vehicleId: string,
+  batchId: string,
+  asOfDate: Date
+) {
+  const balances = await getVehicleBatchBalances(tx, vehicleId, [batchId], asOfDate);
+  return Math.max(0, balances.get(batchId) ?? 0);
 }
 
 function applyWarehouseMovement(balance: number, movement: { transactionType: string; quantityChange: number }) {
@@ -174,6 +236,19 @@ async function getSafeVehicleBatchAvailableFromDate(
   }
 
   return Math.max(0, minimumBalance);
+}
+
+async function getInvoiceVehicleBatchAvailable(
+  tx: Prisma.TransactionClient,
+  vehicleId: string,
+  batchId: string,
+  invoiceDate: Date
+) {
+  if (invoiceDate >= startOfToday()) {
+    return getVehicleBatchBalance(tx, vehicleId, batchId, invoiceDate);
+  }
+
+  return getSafeVehicleBatchAvailableFromDate(tx, vehicleId, batchId, invoiceDate);
 }
 
 async function getInvoiceUnallocatedAmount(tx: Prisma.TransactionClient, invoiceId: string) {
@@ -498,6 +573,11 @@ export async function receiveBatchAction(formData: FormData) {
 export async function updateBatchAction(formData: FormData) {
   const id = String(formData.get("id"));
   const data = batchSchema.parse(Object.fromEntries(formData));
+  const usedInInvoices = await prisma.invoiceItem.count({ where: { batchId: id } });
+  if (usedInInvoices > 0) {
+    throw new Error("This batch is already used in invoices, so it cannot be edited.");
+  }
+
   const batch = await prisma.productBatch.update({
     where: { id },
     data: {
@@ -643,15 +723,24 @@ export async function createInvoiceAction(formData: FormData) {
     for (const item of data.items) {
       const batch = batchById.get(item.batchId);
       if (!batch) throw new Error("Selected batch was not found");
-      const available = await getSafeVehicleBatchAvailableFromDate(tx, data.vehicleId, item.batchId, invoiceDate);
+      const available = await getInvoiceVehicleBatchAvailable(tx, data.vehicleId, item.batchId, invoiceDate);
       if (item.quantity > available) {
-        throw new Error(`Only ${available} items are available on vehicle for ${batch.product.name}`);
+        throw new Error(`Only ${available} items are available on vehicle for ${batch.product.name} ${batch.product.measurement} in the selected expiry batch`);
       }
     }
 
     const total = data.items.reduce((sum, item) => {
       const batch = batchById.get(item.batchId);
-      return sum + item.quantity * Number(batch?.product.sellingPrice ?? 0);
+      if (!batch) return sum;
+      const discountType = normalizedDiscountType(item.discountType);
+      const discountValue = normalizedDiscountValue(discountType, item.discountValue);
+      return sum + calculateDiscountedLineTotal({
+        unitPrice: Number(batch.product.sellingPrice),
+        quantity: item.quantity,
+        discountType,
+        discountValue,
+        productName: `${batch.product.name} ${batch.product.measurement}`
+      });
     }, 0);
 
     const createdInvoice = await tx.invoice.create({
@@ -668,6 +757,15 @@ export async function createInvoiceAction(formData: FormData) {
       const batch = batchById.get(item.batchId);
       if (!batch) throw new Error("Selected batch was not found");
       const unitPrice = batch.product.sellingPrice;
+      const discountType = normalizedDiscountType(item.discountType);
+      const discountValue = normalizedDiscountValue(discountType, item.discountValue);
+      const lineTotal = calculateDiscountedLineTotal({
+        unitPrice: Number(unitPrice),
+        quantity: item.quantity,
+        discountType,
+        discountValue,
+        productName: `${batch.product.name} ${batch.product.measurement}`
+      });
       const invoiceItem = await tx.invoiceItem.create({
         data: {
           invoiceId: createdInvoice.id,
@@ -675,7 +773,9 @@ export async function createInvoiceAction(formData: FormData) {
           batchId: batch.id,
           quantity: item.quantity,
           unitPrice,
-          lineTotal: new Prisma.Decimal(Number(unitPrice) * item.quantity)
+          discountType,
+          discountValue: new Prisma.Decimal(discountValue),
+          lineTotal: new Prisma.Decimal(lineTotal)
         }
       });
 
@@ -784,15 +884,24 @@ export async function updateInvoiceAction(formData: FormData) {
     for (const item of data.items) {
       const batch = batchById.get(item.batchId);
       if (!batch) throw new Error("Selected batch was not found");
-      const available = await getSafeVehicleBatchAvailableFromDate(tx, data.vehicleId, item.batchId, invoiceDate);
+      const available = await getInvoiceVehicleBatchAvailable(tx, data.vehicleId, item.batchId, invoiceDate);
       if (item.quantity > available) {
-        throw new Error(`Only ${available} items are available on vehicle for ${batch.product.name}`);
+        throw new Error(`Only ${available} items are available on vehicle for ${batch.product.name} ${batch.product.measurement} in the selected expiry batch`);
       }
     }
 
     const total = data.items.reduce((sum, item) => {
       const batch = batchById.get(item.batchId);
-      return sum + item.quantity * Number(batch?.product.sellingPrice ?? 0);
+      if (!batch) return sum;
+      const discountType = normalizedDiscountType(item.discountType);
+      const discountValue = normalizedDiscountValue(discountType, item.discountValue);
+      return sum + calculateDiscountedLineTotal({
+        unitPrice: Number(batch.product.sellingPrice),
+        quantity: item.quantity,
+        discountType,
+        discountValue,
+        productName: `${batch.product.name} ${batch.product.measurement}`
+      });
     }, 0);
 
     await tx.invoice.update({
@@ -810,6 +919,15 @@ export async function updateInvoiceAction(formData: FormData) {
       const batch = batchById.get(item.batchId);
       if (!batch) throw new Error("Selected batch was not found");
       const unitPrice = batch.product.sellingPrice;
+      const discountType = normalizedDiscountType(item.discountType);
+      const discountValue = normalizedDiscountValue(discountType, item.discountValue);
+      const lineTotal = calculateDiscountedLineTotal({
+        unitPrice: Number(unitPrice),
+        quantity: item.quantity,
+        discountType,
+        discountValue,
+        productName: `${batch.product.name} ${batch.product.measurement}`
+      });
       const invoiceItem = await tx.invoiceItem.create({
         data: {
           invoiceId,
@@ -817,7 +935,9 @@ export async function updateInvoiceAction(formData: FormData) {
           batchId: batch.id,
           quantity: item.quantity,
           unitPrice,
-          lineTotal: new Prisma.Decimal(Number(unitPrice) * item.quantity)
+          discountType,
+          discountValue: new Prisma.Decimal(discountValue),
+          lineTotal: new Prisma.Decimal(lineTotal)
         }
       });
 
