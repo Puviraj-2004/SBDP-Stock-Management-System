@@ -30,6 +30,8 @@ type StockOption = {
 type DiscountType = "none" | "amount" | "percentage";
 
 type InvoiceItemDraft = {
+  invoiceItemId?: string;
+  unitPrice?: number;
   batchId: string;
   quantity: number;
   discountType: DiscountType;
@@ -125,7 +127,7 @@ export function VehicleInvoiceForm({
     : 0;
   const total = items.reduce((sum, item) => {
     const row = stockRows.find((entry) => entry.batchId === item.batchId);
-    return sum + getLineTotal(row?.sellingPrice ?? 0, item.quantity, item.discountType, item.discountValue);
+    return sum + getLineTotal(item.unitPrice ?? row?.sellingPrice ?? 0, item.quantity, item.discountType, item.discountValue);
   }, 0);
 
   function selectByCode(value: string) {
@@ -141,6 +143,8 @@ export function VehicleInvoiceForm({
     if (!selectedBatchId || quantity <= 0 || quantity > selectedAvailable || discountInvalid) return;
     setItems((current) => {
       const existing = current.find((item) =>
+        !item.invoiceItemId &&
+        item.unitPrice === selectedRow?.sellingPrice &&
         item.batchId === selectedBatchId &&
         item.discountType === discountType &&
         item.discountValue === normalizedDiscountValue
@@ -150,7 +154,7 @@ export function VehicleInvoiceForm({
           item === existing ? { ...item, quantity: item.quantity + quantity } : item
         );
       }
-      return [...current, { batchId: selectedBatchId, quantity, discountType, discountValue: normalizedDiscountValue }];
+      return [...current, { batchId: selectedBatchId, unitPrice: selectedRow?.sellingPrice, quantity, discountType, discountValue: normalizedDiscountValue }];
     });
     setSelectedBatchId("");
     setScanCode("");
@@ -298,6 +302,7 @@ export function VehicleInvoiceForm({
         {items.map((item, index) => (
           <div key={`${item.batchId}-${item.discountType}-${item.discountValue}-${index}`}>
             <input type="hidden" name={`batch-${index}`} value={item.batchId} />
+            {item.invoiceItemId ? <input type="hidden" name={`invoiceItemId-${index}`} value={item.invoiceItemId} /> : null}
             <input type="hidden" name={`quantity-${index}`} value={item.quantity} />
             <input type="hidden" name={`discountType-${index}`} value={item.discountType} />
             <input type="hidden" name={`discountValue-${index}`} value={item.discountValue} />
@@ -306,7 +311,8 @@ export function VehicleInvoiceForm({
         <Table headers={["Product", "Qty", "Unit price", "Discount", "Line total", "Action"]}>
           {items.map((item, index) => {
             const row = stockRows.find((entry) => entry.batchId === item.batchId);
-            const lineTotal = getLineTotal(row?.sellingPrice ?? 0, item.quantity, item.discountType, item.discountValue);
+            const unitPrice = item.unitPrice ?? row?.sellingPrice ?? 0;
+            const lineTotal = getLineTotal(unitPrice, item.quantity, item.discountType, item.discountValue);
             return (
               <tr key={`${item.batchId}-${item.discountType}-${item.discountValue}-${index}`}>
                 <td className="px-3 py-2">
@@ -314,7 +320,7 @@ export function VehicleInvoiceForm({
                   <div className="text-xs text-muted">{row?.supplierName} - exp {row?.expiryLabel}</div>
                 </td>
                 <td className="px-3 py-2 tabular">{item.quantity}</td>
-                <td className="px-3 py-2 tabular">{row?.priceLabel ?? "-"}</td>
+                <td className="px-3 py-2 tabular">LKR {unitPrice.toFixed(2)}</td>
                 <td className="px-3 py-2 tabular">{discountLabel(item.discountType, item.discountValue)}</td>
                 <td className="px-3 py-2 tabular">{lineTotal.toFixed(2)}</td>
                 <td className="px-3 py-2">

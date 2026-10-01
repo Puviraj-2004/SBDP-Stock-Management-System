@@ -130,6 +130,8 @@ async function EditSaleInvoiceForm({
       maxInvoiceDate={today}
       dateChangePath={`/invoices/${invoice.id}/edit`}
       initialItems={invoice.items.map((item) => ({
+        invoiceItemId: item.id,
+        unitPrice: Number(item.unitPrice),
         batchId: item.batchId,
         quantity: item.quantity,
         discountType: item.discountType,

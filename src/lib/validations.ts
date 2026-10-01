@@ -88,6 +88,7 @@ export const invoiceSchema = z.object({
   invoiceDate: dateText,
   items: z.array(
     z.object({
+      invoiceItemId: z.string().min(1).optional(),
       batchId: z.string().min(1),
       quantity: positiveInt,
       discountType: z.enum(["none", "amount", "percentage"]).default("none"),

@@ -58,15 +58,17 @@ function getInvoiceItemsFromForm(formData: FormData) {
       const index = match[1];
       return {
         index: Number(index),
+        invoiceItemId: formData.has(`invoiceItemId-${index}`) ? String(formData.get(`invoiceItemId-${index}`)) : undefined,
         batchId: String(formData.get(`batch-${index}`) ?? ""),
         quantity: Number(formData.get(`quantity-${index}`) ?? 0),
         discountType: String(formData.get(`discountType-${index}`) ?? "none"),
         discountValue: Number(formData.get(`discountValue-${index}`) ?? 0)
       };
     })
-    .filter((row): row is { index: number; batchId: string; quantity: number; discountType: string; discountValue: number } => Boolean(row))
+    .filter((row): row is { index: number; invoiceItemId: string | undefined; batchId: string; quantity: number; discountType: string; discountValue: number } => Boolean(row))
     .sort((a, b) => a.index - b.index)
-    .map(({ batchId, quantity, discountType, discountValue }) => ({
+    .map(({ invoiceItemId, batchId, quantity, discountType, discountValue }) => ({
+      invoiceItemId,
       batchId,
       quantity,
       discountType,
@@ -865,12 +867,25 @@ export async function updateInvoiceAction(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const existing = await tx.invoice.findUnique({
       where: { id: invoiceId },
-      include: { allocations: true, payments: true }
+      include: { allocations: true, payments: true, items: true }
     });
     if (!existing) throw new Error("Invoice not found");
     if (existing.invoiceType === "opening") throw new Error("Old invoices cannot be edited here");
     if (existing.allocations.length > 0 || existing.payments.length > 0) {
       throw new Error("Invoices with payments cannot be edited");
+    }
+
+    const originalItems = new Map(existing.items.map((item) => [item.id, item]));
+    const getItemUnitPrice = (item: { invoiceItemId?: string }, currentPrice: Prisma.Decimal) =>
+      item.invoiceItemId ? originalItems.get(item.invoiceItemId)!.unitPrice : currentPrice;
+    const retainedItemIds = new Set<string>();
+    for (const item of data.items) {
+      if (!item.invoiceItemId) continue;
+      const original = originalItems.get(item.invoiceItemId);
+      if (!original || original.batchId !== item.batchId || retainedItemIds.has(item.invoiceItemId)) {
+        throw new Error("Invoice item is invalid. Reload the invoice and try again.");
+      }
+      retainedItemIds.add(item.invoiceItemId);
     }
 
     await tx.invoiceItem.deleteMany({ where: { invoiceId } });
@@ -896,7 +911,7 @@ export async function updateInvoiceAction(formData: FormData) {
       const discountType = normalizedDiscountType(item.discountType);
       const discountValue = normalizedDiscountValue(discountType, item.discountValue);
       return sum + calculateDiscountedLineTotal({
-        unitPrice: Number(batch.product.sellingPrice),
+        unitPrice: Number(getItemUnitPrice(item, batch.product.sellingPrice)),
         quantity: item.quantity,
         discountType,
         discountValue,
@@ -918,7 +933,7 @@ export async function updateInvoiceAction(formData: FormData) {
     for (const item of data.items) {
       const batch = batchById.get(item.batchId);
       if (!batch) throw new Error("Selected batch was not found");
-      const unitPrice = batch.product.sellingPrice;
+      const unitPrice = getItemUnitPrice(item, batch.product.sellingPrice);
       const discountType = normalizedDiscountType(item.discountType);
       const discountValue = normalizedDiscountValue(discountType, item.discountValue);
       const lineTotal = calculateDiscountedLineTotal({
