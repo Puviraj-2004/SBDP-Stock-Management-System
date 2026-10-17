@@ -1,6 +1,7 @@
 import { paymentCountsTowardBalance } from "@/lib/balance";
 import { prisma } from "@/lib/db";
 import { dateInputToDate, displayDate, startOfToday, toDateInputValue } from "@/lib/dates";
+import { getInvoiceItemRevenues } from "@/lib/invoiceRevenue";
 
 function currentMonthInput() {
   return toDateInputValue(startOfToday()).slice(0, 7);
@@ -88,9 +89,9 @@ async function monthCore(month: string, supplierId?: string) {
   const countedPayments = payments.filter(paymentCountsTowardBalance);
   const sales = saleInvoices.reduce((sum, invoice) => {
     if (!supplierId) return sum + Number(invoice.totalAmount);
-    return sum + invoice.items
-      .filter((item) => matchesSupplier(item.product.supplierId))
-      .reduce((itemSum, item) => itemSum + Number(item.lineTotal), 0);
+    return sum + getInvoiceItemRevenues(invoice)
+      .filter(({ item }) => matchesSupplier(item.product.supplierId))
+      .reduce((itemSum, row) => itemSum + row.revenue, 0);
   }, 0);
   const openingBalanceAdded = supplierId
     ? 0
@@ -106,8 +107,7 @@ async function monthCore(month: string, supplierId?: string) {
     .filter((item) => matchesSupplier(item.product.supplierId))
     .reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
   const profit = saleInvoices.reduce((sum, invoice) => {
-    return sum + invoice.items.filter((item) => matchesSupplier(item.product.supplierId)).reduce((itemSum, item) => {
-      const revenue = Number(item.lineTotal);
+    return sum + getInvoiceItemRevenues(invoice).filter(({ item }) => matchesSupplier(item.product.supplierId)).reduce((itemSum, { item, revenue }) => {
       const cost = Number(item.batch.costPrice) * item.quantity;
       return itemSum + revenue - cost;
     }, 0);
@@ -161,10 +161,10 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
   }
 
   for (const invoice of current.saleInvoices) {
-    const matchingItems = invoice.items.filter((item) => !effectiveSupplierId || item.product.supplierId === effectiveSupplierId);
+    const matchingItems = getInvoiceItemRevenues(invoice).filter(({ item }) => !effectiveSupplierId || item.product.supplierId === effectiveSupplierId);
     if (effectiveSupplierId && matchingItems.length === 0) continue;
     const invoiceTotal = effectiveSupplierId
-      ? matchingItems.reduce((sum, item) => sum + Number(item.lineTotal), 0)
+      ? matchingItems.reduce((sum, row) => sum + row.revenue, 0)
       : Number(invoice.totalAmount);
     const day = toDateInputValue(invoice.invoiceDate);
     trendMap.set(day, (trendMap.get(day) ?? 0) + invoiceTotal);
@@ -175,11 +175,11 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
 
     if (invoice.vehicleId && invoice.vehicle) {
       const vehicle = vehicleMap.get(invoice.vehicleId) ?? { vehicleId: invoice.vehicleId, vehicle: invoice.vehicle.nameOrNumber, loaded: 0, sold: 0, returned: 0 };
-      vehicle.sold += matchingItems.reduce((sum, item) => sum + item.quantity, 0);
+      vehicle.sold += matchingItems.reduce((sum, row) => sum + row.item.quantity, 0);
       vehicleMap.set(invoice.vehicleId, vehicle);
     }
 
-    for (const item of matchingItems) {
+    for (const { item, revenue } of matchingItems) {
       const product = productMap.get(item.productId) ?? {
         productId: item.productId,
         product: `${item.product.name} ${item.product.measurement}`,
@@ -188,7 +188,6 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
         revenue: 0,
         profit: 0
       };
-      const revenue = Number(item.lineTotal);
       const cost = Number(item.batch.costPrice) * item.quantity;
       product.unitsSold += item.quantity;
       product.revenue += revenue;

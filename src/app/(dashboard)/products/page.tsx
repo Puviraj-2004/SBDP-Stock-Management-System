@@ -5,6 +5,7 @@ import { BarcodeScanInput } from "@/components/BarcodeScanInput";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { PaginationControls } from "@/components/PaginationControls";
 import { ProductCreateDialog } from "@/components/ProductCreateDialog";
+import { ProductsSearch } from "@/components/ProductsSearch";
 import { PageHeader, Panel, Table } from "@/components/ui";
 import { deleteProductAction, productScanAction } from "@/lib/actions";
 import { prisma } from "@/lib/db";
@@ -60,6 +61,7 @@ export default async function ProductsPage({
         }
       />
       <Panel className="mb-5">
+        <div className="mb-3"><ProductsSearch defaultQuery={q} /></div>
         <form action={productScanAction}>
           <BarcodeScanInput name="q" defaultValue={q} />
         </form>
@@ -113,6 +115,9 @@ export default async function ProductsPage({
           </tr>
         ))}
       </Table>
+      {productRows.length === 0 ? (
+        <p role="status" className="mt-3 text-sm text-muted">No products match this search.</p>
+      ) : null}
       <div className="mt-4">
         <PaginationControls
           pathname="/products"

@@ -86,6 +86,8 @@ export const invoiceSchema = z.object({
   shopId: z.string().min(1),
   vehicleId: z.string().min(1),
   invoiceDate: dateText,
+  invoiceDiscountType: z.enum(["none", "amount", "percentage"]).default("none"),
+  invoiceDiscountValue: z.coerce.number().min(0).default(0),
   items: z.array(
     z.object({
       invoiceItemId: z.string().min(1).optional(),

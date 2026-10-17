@@ -20,6 +20,8 @@ export async function GET() {
   const rows = await Promise.all(
     invoices.map(async (invoice) => {
       const paid = await getInvoicePaidAmount(invoice.id);
+      const subtotal = invoice.items.reduce((sum, item) => sum + Number(item.lineTotal), 0);
+      const invoiceDiscount = Math.max(0, subtotal - Number(invoice.totalAmount));
       const total = Number(invoice.totalAmount);
       return [
         displayDate(invoice.invoiceDate),
@@ -27,6 +29,8 @@ export async function GET() {
         invoice.invoiceType === "opening" ? "Old invoice" : invoice.vehicle?.nameOrNumber ?? "-",
         invoice.items.map((item) => item.product.name).join(", "),
         invoice.items.length,
+        subtotal,
+        invoiceDiscount,
         total,
         paid,
         Math.max(0, total - paid),
@@ -38,7 +42,7 @@ export async function GET() {
   return workbookResponse("invoices-export.xlsx", [
     {
       name: "Invoices",
-      columns: ["Invoice Date", "Shop", "Source", "Products", "Items", "Total", "Paid", "Remaining", "Paid Status"],
+      columns: ["Invoice Date", "Shop", "Source", "Products", "Items", "Subtotal", "Invoice Discount", "Total", "Paid", "Remaining", "Paid Status"],
       rows
     }
   ]);

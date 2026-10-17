@@ -137,6 +137,8 @@ async function EditSaleInvoiceForm({
         discountType: item.discountType,
         discountValue: Number(item.discountValue)
       }))}
+      initialInvoiceDiscountType={invoice.invoiceDiscountType}
+      initialInvoiceDiscountValue={Number(invoice.invoiceDiscountValue)}
     />
   );
 }

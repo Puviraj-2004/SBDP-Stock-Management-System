@@ -124,6 +124,30 @@ function calculateDiscountedLineTotal({
   return roundMoney(Math.max(0, finalLineTotal));
 }
 
+function calculateInvoiceDiscountedTotal({
+  subtotal,
+  discountType,
+  discountValue
+}: {
+  subtotal: number;
+  discountType: string;
+  discountValue: number;
+}) {
+  if (discountType === "amount" && discountValue > subtotal) {
+    throw new Error("Invoice discount cannot be more than the invoice subtotal");
+  }
+  if (discountType === "percentage" && discountValue > 100) {
+    throw new Error("Invoice discount percentage cannot be more than 100%");
+  }
+
+  const total = discountType === "amount"
+    ? subtotal - discountValue
+    : discountType === "percentage"
+      ? subtotal - (subtotal * discountValue) / 100
+      : subtotal;
+  return roundMoney(Math.max(0, total));
+}
+
 function getReturnItemsFromForm(formData: FormData) {
   const rows = Array.from(formData.entries())
     .map(([key]) => {
@@ -514,6 +538,19 @@ export async function deleteShopAction(formData: FormData) {
 
 export async function createProductAction(formData: FormData) {
   const data = productSchema.parse(Object.fromEntries(formData));
+  const existing = await prisma.product.findFirst({
+    where: {
+      supplierId: data.supplierId,
+      OR: [
+        ...(data.barcode ? [{ barcode: data.barcode }] : []),
+        { name: data.name, measurement: data.measurement }
+      ]
+    },
+    select: { name: true, measurement: true }
+  });
+  if (existing) {
+    return { error: `${existing.name} ${existing.measurement} already exists for this supplier.` };
+  }
   const product = await prisma.product.create({
     data: {
       supplierId: data.supplierId,
@@ -526,7 +563,7 @@ export async function createProductAction(formData: FormData) {
     }
   });
   revalidatePath("/products");
-  return { id: product.id };
+  return { id: product.id, error: undefined };
 }
 
 export async function updateProductAction(formData: FormData) {
@@ -731,7 +768,7 @@ export async function createInvoiceAction(formData: FormData) {
       }
     }
 
-    const total = data.items.reduce((sum, item) => {
+    const subtotal = data.items.reduce((sum, item) => {
       const batch = batchById.get(item.batchId);
       if (!batch) return sum;
       const discountType = normalizedDiscountType(item.discountType);
@@ -744,6 +781,13 @@ export async function createInvoiceAction(formData: FormData) {
         productName: `${batch.product.name} ${batch.product.measurement}`
       });
     }, 0);
+    const invoiceDiscountType = normalizedDiscountType(data.invoiceDiscountType);
+    const invoiceDiscountValue = normalizedDiscountValue(invoiceDiscountType, data.invoiceDiscountValue);
+    const total = calculateInvoiceDiscountedTotal({
+      subtotal,
+      discountType: invoiceDiscountType,
+      discountValue: invoiceDiscountValue
+    });
 
     const createdInvoice = await tx.invoice.create({
       data: {
@@ -751,6 +795,8 @@ export async function createInvoiceAction(formData: FormData) {
         vehicleId: data.vehicleId,
         invoiceType: "sale",
         invoiceDate,
+        invoiceDiscountType,
+        invoiceDiscountValue: new Prisma.Decimal(invoiceDiscountValue),
         totalAmount: new Prisma.Decimal(total)
       }
     });
@@ -905,7 +951,7 @@ export async function updateInvoiceAction(formData: FormData) {
       }
     }
 
-    const total = data.items.reduce((sum, item) => {
+    const subtotal = data.items.reduce((sum, item) => {
       const batch = batchById.get(item.batchId);
       if (!batch) return sum;
       const discountType = normalizedDiscountType(item.discountType);
@@ -918,6 +964,13 @@ export async function updateInvoiceAction(formData: FormData) {
         productName: `${batch.product.name} ${batch.product.measurement}`
       });
     }, 0);
+    const invoiceDiscountType = normalizedDiscountType(data.invoiceDiscountType);
+    const invoiceDiscountValue = normalizedDiscountValue(invoiceDiscountType, data.invoiceDiscountValue);
+    const total = calculateInvoiceDiscountedTotal({
+      subtotal,
+      discountType: invoiceDiscountType,
+      discountValue: invoiceDiscountValue
+    });
 
     await tx.invoice.update({
       where: { id: invoiceId },
@@ -925,6 +978,8 @@ export async function updateInvoiceAction(formData: FormData) {
         shopId: data.shopId,
         vehicleId: data.vehicleId,
         invoiceDate,
+        invoiceDiscountType,
+        invoiceDiscountValue: new Prisma.Decimal(invoiceDiscountValue),
         totalAmount: new Prisma.Decimal(total),
         paidStatus: "unpaid"
       }

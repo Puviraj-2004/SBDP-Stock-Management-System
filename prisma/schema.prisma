@@ -202,6 +202,8 @@ model Invoice {
   referenceNumber String?
   notes           String?
   invoiceDate     DateTime    @default(now()) @db.Date
+  invoiceDiscountType  DiscountType @default(none)
+  invoiceDiscountValue Decimal      @default(0) @db.Decimal(12, 2)
   totalAmount     Decimal     @default(0) @db.Decimal(12, 2)
   paidStatus      PaidStatus  @default(unpaid)
   createdAt       DateTime    @default(now())

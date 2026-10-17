@@ -1,6 +1,7 @@
 import { paymentCountsTowardBalance } from "@/lib/balance";
 import { prisma } from "@/lib/db";
 import { dateInputToDate, displayDate, startOfToday, toDateInputValue } from "@/lib/dates";
+import { getInvoiceItemRevenues } from "@/lib/invoiceRevenue";
 
 export function dateRangeFromInput(value?: string) {
   const selected = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : toDateInputValue(startOfToday());
@@ -128,8 +129,8 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
   const pendingCheques = payments.filter((payment) => payment.method === "cheque" && payment.chequeStatus === "pending");
   const supplierSaleInvoiceRows = saleInvoices
     .map((invoice) => {
-      const items = invoice.items.filter((item) => matchesSupplier(item.product.supplierId));
-      const amount = items.reduce((sum, item) => sum + Number(item.lineTotal), 0);
+      const items = getInvoiceItemRevenues(invoice).filter(({ item }) => matchesSupplier(item.product.supplierId));
+      const amount = items.reduce((sum, row) => sum + row.revenue, 0);
       return { invoice, items, amount };
     })
     .filter((row) => row.items.length > 0 || !effectiveSupplierId);
@@ -138,8 +139,7 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
     ? 0
     : openingInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
   const profit = saleInvoices.reduce((sum, invoice) => {
-    return sum + invoice.items.filter((item) => matchesSupplier(item.product.supplierId)).reduce((itemSum, item) => {
-      const revenue = Number(item.lineTotal);
+    return sum + getInvoiceItemRevenues(invoice).filter(({ item }) => matchesSupplier(item.product.supplierId)).reduce((itemSum, { item, revenue }) => {
       const cost = Number(item.batch.costPrice) * item.quantity;
       return itemSum + revenue - cost;
     }, 0);
@@ -183,9 +183,8 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
   }
 
   for (const invoice of saleInvoices) {
-    for (const item of invoice.items.filter((row) => matchesSupplier(row.product.supplierId))) {
+    for (const { item, revenue } of getInvoiceItemRevenues(invoice).filter(({ item }) => matchesSupplier(item.product.supplierId))) {
       const row = productRow(item.product);
-      const revenue = Number(item.lineTotal);
       const cost = Number(item.batch.costPrice) * item.quantity;
       row.sold += item.quantity;
       row.revenue += revenue;
@@ -207,13 +206,13 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
       }];
     }
 
-    const items = invoice.items.filter((item) => matchesSupplier(item.product.supplierId));
+    const items = getInvoiceItemRevenues(invoice).filter(({ item }) => matchesSupplier(item.product.supplierId));
     if (effectiveSupplierId && items.length === 0) return [];
     return [{
       id: invoice.id,
       shop: invoice.shop.name,
       vehicle: invoice.vehicle?.nameOrNumber ?? "-",
-      amount: effectiveSupplierId ? items.reduce((sum, item) => sum + Number(item.lineTotal), 0) : Number(invoice.totalAmount),
+      amount: effectiveSupplierId ? items.reduce((sum, row) => sum + row.revenue, 0) : Number(invoice.totalAmount),
       status: invoice.paidStatus,
       label: invoiceLabel(invoice),
       invoiceType: invoice.invoiceType

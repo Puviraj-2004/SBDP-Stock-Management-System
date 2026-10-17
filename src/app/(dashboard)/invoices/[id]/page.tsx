@@ -14,6 +14,13 @@ function discountLabel(type: string, value: unknown) {
   return "-";
 }
 
+function invoiceDiscountLabel(type: string, value: unknown) {
+  const amount = Number(value ?? 0);
+  if (type === "amount") return money(amount);
+  if (type === "percentage") return `${amount}%`;
+  return "-";
+}
+
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const invoice = await prisma.invoice.findUnique({
@@ -31,6 +38,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const paid = await getInvoicePaidAmount(invoice.id);
   const remaining = Math.max(0, Number(invoice.totalAmount) - paid);
   const isOpeningInvoice = invoice.invoiceType === "opening";
+  const itemSubtotal = invoice.items.reduce((sum, item) => sum + Number(item.lineTotal), 0);
+  const invoiceDiscountAmount = Math.max(0, itemSubtotal - Number(invoice.totalAmount));
   const paymentRows = invoice.allocations.map((allocation) => ({
     allocationId: allocation.id,
     appliedAmount: String(allocation.amount),
@@ -116,6 +125,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                     <td className="px-3 py-2 tabular">{money(item.lineTotal)}</td>
                   </tr>
                 ))}
+                <tr className="bg-[#ebe7dd] font-semibold">
+                  <td className="px-3 py-2" colSpan={5}>Subtotal</td>
+                  <td className="px-3 py-2 tabular">{money(itemSubtotal)}</td>
+                </tr>
+                {invoiceDiscountAmount > 0 ? (
+                  <tr className="bg-[#f5f2eb]">
+                    <td className="px-3 py-2" colSpan={5}>Invoice discount ({invoiceDiscountLabel(invoice.invoiceDiscountType, invoice.invoiceDiscountValue)})</td>
+                    <td className="px-3 py-2 tabular">-{money(invoiceDiscountAmount)}</td>
+                  </tr>
+                ) : null}
                 <tr className="bg-[#ebe7dd] font-semibold">
                   <td className="px-3 py-2" colSpan={5}>Total</td>
                   <td className="px-3 py-2 tabular">{money(invoice.totalAmount)}</td>

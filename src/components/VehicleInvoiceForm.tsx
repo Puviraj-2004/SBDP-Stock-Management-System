@@ -67,7 +67,9 @@ export function VehicleInvoiceForm({
   maxInvoiceDate,
   onInvoiceDateChange,
   dateChangePath,
-  initialItems = []
+  initialItems = [],
+  initialInvoiceDiscountType = "none",
+  initialInvoiceDiscountValue = 0
 }: {
   mode: "create" | "edit";
   invoiceId?: string;
@@ -81,6 +83,8 @@ export function VehicleInvoiceForm({
   onInvoiceDateChange?: (date: string) => void;
   dateChangePath?: string;
   initialItems?: InvoiceItemDraft[];
+  initialInvoiceDiscountType?: DiscountType;
+  initialInvoiceDiscountValue?: number;
 }) {
   const router = useRouter();
   const [scanCode, setScanCode] = useState("");
@@ -89,6 +93,8 @@ export function VehicleInvoiceForm({
   const [discountType, setDiscountType] = useState<DiscountType>("none");
   const [discountValue, setDiscountValue] = useState(0);
   const [items, setItems] = useState<InvoiceItemDraft[]>(initialItems);
+  const [invoiceDiscountType, setInvoiceDiscountType] = useState<DiscountType>(initialInvoiceDiscountType);
+  const [invoiceDiscountValue, setInvoiceDiscountValue] = useState(initialInvoiceDiscountValue);
   const [actionState, formAction, isPending] = useActionState(
     mode === "create" ? createInvoiceFormAction : updateInvoiceFormAction,
     {}
@@ -125,10 +131,20 @@ export function VehicleInvoiceForm({
   const linePreview = selectedRow && !discountInvalid
     ? getLineTotal(selectedRow.sellingPrice, quantity, discountType, normalizedDiscountValue)
     : 0;
-  const total = items.reduce((sum, item) => {
+  const subtotal = items.reduce((sum, item) => {
     const row = stockRows.find((entry) => entry.batchId === item.batchId);
     return sum + getLineTotal(item.unitPrice ?? row?.sellingPrice ?? 0, item.quantity, item.discountType, item.discountValue);
   }, 0);
+  const normalizedInvoiceDiscountValue = invoiceDiscountType === "none" ? 0 : Math.max(0, invoiceDiscountValue);
+  const invoiceDiscountInvalid =
+    (invoiceDiscountType === "amount" && normalizedInvoiceDiscountValue > subtotal) ||
+    (invoiceDiscountType === "percentage" && normalizedInvoiceDiscountValue > 100);
+  const invoiceDiscountAmount = invoiceDiscountType === "amount"
+    ? normalizedInvoiceDiscountValue
+    : invoiceDiscountType === "percentage"
+      ? roundMoney((subtotal * normalizedInvoiceDiscountValue) / 100)
+      : 0;
+  const total = roundMoney(Math.max(0, subtotal - invoiceDiscountAmount));
 
   function selectByCode(value: string) {
     const code = value.trim().toLowerCase();
@@ -340,11 +356,51 @@ export function VehicleInvoiceForm({
             );
           })}
           <tr className="bg-[#ebe7dd] font-semibold">
-            <td className="px-3 py-2" colSpan={4}>Total</td>
-            <td className="px-3 py-2 tabular">{total.toFixed(2)}</td>
+            <td className="px-3 py-2" colSpan={4}>Subtotal</td>
+            <td className="px-3 py-2 tabular">{subtotal.toFixed(2)}</td>
             <td className="px-3 py-2" />
           </tr>
         </Table>
+      </div>
+
+      <div className="rounded-md border border-line bg-[#fbfaf7] p-3">
+        <h2 className="mb-3 font-semibold">Invoice discount</h2>
+        <div className="grid gap-3 md:grid-cols-[180px_160px_minmax(0,1fr)]">
+          <Field label="Discount type">
+            <Select name="invoiceDiscountType" value={invoiceDiscountType} onChange={(event) => {
+              const nextType = event.target.value as DiscountType;
+              setInvoiceDiscountType(nextType);
+              if (nextType === "none") setInvoiceDiscountValue(0);
+            }}>
+              <option value="none">No discount</option>
+              <option value="amount">Amount</option>
+              <option value="percentage">Percentage</option>
+            </Select>
+          </Field>
+          <Field label="Discount value">
+            <Input
+              name="invoiceDiscountValue"
+              type="number"
+              min="0"
+              step="0.01"
+              max={invoiceDiscountType === "percentage" ? 100 : subtotal}
+              value={normalizedInvoiceDiscountValue}
+              disabled={invoiceDiscountType === "none"}
+              aria-describedby={invoiceDiscountInvalid ? "invoice-discount-error" : undefined}
+              onChange={(event) => setInvoiceDiscountValue(Number(event.target.value))}
+            />
+          </Field>
+          <div className="flex items-end">
+            <div className="min-h-10 w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-muted">
+              Invoice total: <span className="font-semibold text-ink tabular">{total.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+        {invoiceDiscountInvalid ? (
+          <p id="invoice-discount-error" role="alert" className="mt-3 text-sm text-red-700">
+            Invoice discount cannot be more than the subtotal or 100%.
+          </p>
+        ) : null}
       </div>
 
       {actionState.message ? (
@@ -352,7 +408,7 @@ export function VehicleInvoiceForm({
           {actionState.message}
         </div>
       ) : null}
-      <Button type="submit" disabled={items.length === 0 || isPending}>
+      <Button type="submit" disabled={items.length === 0 || invoiceDiscountInvalid || isPending}>
         {isPending ? "Saving..." : mode === "create" ? "Create invoice" : "Save invoice"}
       </Button>
     </form>
