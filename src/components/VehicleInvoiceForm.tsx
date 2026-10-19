@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import { BarcodeScanInput } from "@/components/BarcodeScanInput";
 import { ConfirmButton } from "@/components/ConfirmSubmitButton";
 import { DatePickerInput } from "@/components/DatePickerInput";
@@ -89,6 +89,8 @@ export function VehicleInvoiceForm({
   const router = useRouter();
   const [scanCode, setScanCode] = useState("");
   const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [discountType, setDiscountType] = useState<DiscountType>("none");
   const [discountValue, setDiscountValue] = useState(0);
@@ -120,6 +122,13 @@ export function VehicleInvoiceForm({
   }, [availableRows, scanCode]);
 
   const productChoices = scanCode.trim() ? scanMatches : availableRows;
+  const normalizedProductSearch = productSearch.toLowerCase().replace(/\s+/g, " ").trim();
+  const compactProductSearch = normalizedProductSearch.replace(/\s/g, "");
+  const filteredProductChoices = productChoices.filter((row) => {
+    if (!normalizedProductSearch) return true;
+    const searchableText = `${row.productName} ${row.measurement}`.toLowerCase().replace(/\s+/g, " ").trim();
+    return searchableText.includes(normalizedProductSearch) || searchableText.replace(/\s/g, "").includes(compactProductSearch);
+  });
   const selectedRow = stockRows.find((row) => row.batchId === selectedBatchId);
   const selectedAvailable = selectedRow ? selectedRow.balance - (usedByBatch.get(selectedRow.batchId) ?? 0) : 0;
   const normalizedDiscountValue = discountType === "none" ? 0 : Math.max(0, discountValue);
@@ -153,6 +162,12 @@ export function VehicleInvoiceForm({
       (row) => row.barcode?.toLowerCase() === code || row.itemCode?.toLowerCase() === code
     );
     setSelectedBatchId(exactMatches.length === 1 ? exactMatches[0].batchId : "");
+  }
+
+  function chooseProduct(batchId: string) {
+    setSelectedBatchId(batchId);
+    setProductSearch("");
+    setProductDropdownOpen(false);
   }
 
   function addItem() {
@@ -233,19 +248,71 @@ export function VehicleInvoiceForm({
             onCommit={selectByCode}
           />
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
-            <Field label="Product">
-              <Select value={selectedBatchId} onChange={(event) => setSelectedBatchId(event.target.value)}>
-                <option value="">Select product</option>
-                {productChoices.map((row) => {
-                  const available = row.balance - (usedByBatch.get(row.batchId) ?? 0);
-                  return (
-                    <option key={row.batchId} value={row.batchId}>
-                      {row.productName} {row.measurement} - {row.supplierName} - exp {row.expiryLabel} - vehicle {available} - {row.priceLabel}
-                    </option>
-                  );
-                })}
-              </Select>
-            </Field>
+            <div className="grid gap-1.5 text-sm font-medium text-ink">
+              <span>Product</span>
+              <div
+                className="relative"
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setProductDropdownOpen(false);
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded={productDropdownOpen}
+                  aria-controls="invoice-product-options"
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-line bg-white px-3 text-left text-sm font-normal text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                  onClick={() => setProductDropdownOpen((open) => !open)}
+                >
+                  <span className="truncate">
+                    {selectedRow
+                      ? `${selectedRow.productName} ${selectedRow.measurement} - ${selectedRow.supplierName} - exp ${selectedRow.expiryLabel} - vehicle ${selectedAvailable} - ${selectedRow.priceLabel}`
+                      : "Select product"}
+                  </span>
+                  <ChevronDown size={16} className="ml-2 shrink-0 text-muted" />
+                </button>
+                {productDropdownOpen ? (
+                  <div className="absolute z-20 mt-1 w-full rounded-md border border-line bg-white p-2 shadow-lg">
+                    <Input
+                      autoFocus
+                      type="search"
+                      value={productSearch}
+                      placeholder="Search products"
+                      aria-label="Search products"
+                      onChange={(event) => setProductSearch(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") setProductDropdownOpen(false);
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          if (filteredProductChoices[0]) chooseProduct(filteredProductChoices[0].batchId);
+                        }
+                      }}
+                    />
+                    <div id="invoice-product-options" role="listbox" aria-label="Available products" className="mt-2 max-h-60 overflow-y-auto">
+                      {filteredProductChoices.length ? filteredProductChoices.map((row) => {
+                        const available = row.balance - (usedByBatch.get(row.batchId) ?? 0);
+                        return (
+                          <button
+                            key={row.batchId}
+                            type="button"
+                            role="option"
+                            aria-selected={row.batchId === selectedBatchId}
+                            className="block w-full rounded px-2 py-2 text-left text-sm font-normal text-ink hover:bg-[#f6f4ef] focus:bg-[#f6f4ef] focus:outline-none"
+                            onClick={() => chooseProduct(row.batchId)}
+                          >
+                            {row.productName} {row.measurement} - {row.supplierName} - exp {row.expiryLabel} - vehicle {available} - {row.priceLabel}
+                          </button>
+                        );
+                      }) : (
+                        <p className="px-2 py-3 text-sm font-normal text-muted">No matching products found</p>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
             <Field label="Quantity">
               <Input
                 type="number"
