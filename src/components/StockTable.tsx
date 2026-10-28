@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Edit, Trash2 } from "lucide-react";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { deleteBatchAction } from "@/lib/actions";
@@ -26,47 +27,51 @@ type StockRow = {
 export function StockTable({
   rows,
   today,
-  soon
+  soon,
+  query: initialQuery,
+  state: initialState
 }: {
   rows: StockRow[];
   today: string;
   soon: string;
+  query: string;
+  state: string;
 }) {
-  const [query, setQuery] = useState("");
-  const [state, setState] = useState("");
+  const router = useRouter();
+  const [query, setQuery] = useState(initialQuery);
+  const [state, setState] = useState(initialState);
+  const [, startTransition] = useTransition();
 
-  const filteredRows = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+  useEffect(() => {
+    setQuery(initialQuery);
+    setState(initialState);
+  }, [initialQuery, initialState]);
 
-    return rows.filter((row) => {
-      const expired = row.expiryDate < today;
-      const expiring = !expired && row.expiryDate <= soon;
-      const available = row.warehouseBalance > 0 && !expired;
-
-      const stateMatch =
-        !state ||
-        (state === "available" && available) ||
-        (state === "expiring" && row.warehouseBalance > 0 && expiring) ||
-        (state === "expired" && row.warehouseBalance > 0 && expired);
-
-      if (!stateMatch) return false;
-      if (!normalized) return true;
-
-      return [row.productName, row.measurement, row.supplierName, row.barcode, row.itemCode]
-        .filter(Boolean)
-        .some((value) => value?.toLowerCase().includes(normalized));
-    });
-  }, [query, rows, soon, state, today]);
+  function updateFilters(nextQuery: string, nextState: string) {
+    const params = new URLSearchParams();
+    if (nextQuery) params.set("q", nextQuery);
+    if (nextState) params.set("state", nextState);
+    const search = params.toString();
+    startTransition(() => router.replace(search ? `/stock?${search}` : "/stock", { scroll: false }));
+  }
 
   return (
     <div className="grid gap-4">
       <div className="grid gap-2 md:grid-cols-[1fr_180px]">
         <Input
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value;
+            setQuery(value);
+            updateFilters(value, state);
+          }}
           placeholder="Search product, supplier, barcode, or item code"
         />
-        <Select value={state} onChange={(event) => setState(event.target.value)}>
+        <Select value={state} onChange={(event) => {
+          const value = event.target.value;
+          setState(value);
+          updateFilters(query, value);
+        }}>
           <option value="">All batches</option>
           <option value="available">Available only</option>
           <option value="expiring">Expiring soon</option>
@@ -75,7 +80,7 @@ export function StockTable({
       </div>
 
       <Table headers={["Product", "Supplier", "Barcode", "Original received", "Warehouse balance", "Cost", "Received date", "Expiry", "State", "Actions"]}>
-        {filteredRows.map((row) => {
+        {rows.map((row) => {
           const expired = row.expiryDate < today;
           const expiring = !expired && row.expiryDate <= soon;
 
@@ -131,7 +136,7 @@ export function StockTable({
         })}
       </Table>
 
-      {filteredRows.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="rounded-md border border-dashed border-line bg-white p-4 text-sm text-muted">
           No stock batches match this filter.
         </div>

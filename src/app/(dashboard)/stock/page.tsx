@@ -5,32 +5,84 @@ import { prisma } from "@/lib/db";
 import { inTwoMonths, money, startOfToday, toDateInputValue } from "@/lib/dates";
 import { DEFAULT_PAGE_SIZE, getPageCount, getPagination, parsePage } from "@/lib/pagination";
 import { getWarehouseBalancesByBatchIds } from "@/lib/stockLedger";
+import type { Prisma } from "@prisma/client";
 
 const allPostedMovementsDate = new Date(Date.UTC(9999, 11, 31));
 
 export default async function StockPage({
   searchParams
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; state?: string }>;
 }) {
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, q: queryParam, state: stateParam } = await searchParams;
   const page = parsePage(pageParam);
+  const query = queryParam ?? "";
+  const state = ["available", "expiring", "expired"].includes(stateParam ?? "") ? stateParam! : "";
   const today = startOfToday();
   const soon = inTwoMonths();
 
-  const [batches, totalBatches] = await Promise.all([
-    prisma.productBatch.findMany({
-      include: {
-        product: { include: { supplier: true } },
-        _count: { select: { loadItems: true, returnItems: true, invoiceItems: true, ledgerEntries: true } }
-      },
-      orderBy: [{ expiryDate: "asc" }, { product: { name: "asc" } }],
-      ...getPagination(page)
-    }),
-    prisma.productBatch.count()
-  ]);
+  const tokens = query.trim().replace(/\s+/g, " ").toLowerCase().split(" ").filter(Boolean);
+  const searchWhere: Prisma.ProductBatchWhereInput = tokens.length
+    ? {
+        AND: tokens.map((token) => ({
+          OR: [
+            { product: { name: { contains: token, mode: "insensitive" } } },
+            { product: { measurement: { contains: token, mode: "insensitive" } } },
+            { product: { supplier: { name: { contains: token, mode: "insensitive" } } } },
+            { product: { barcode: { contains: token, mode: "insensitive" } } },
+            { product: { itemCode: { contains: token, mode: "insensitive" } } }
+          ]
+        }))
+      }
+    : {};
 
-  const warehouseBalances = await getWarehouseBalancesByBatchIds(batches.map((batch) => batch.id), allPostedMovementsDate);
+  const batchQuery = {
+    where: searchWhere,
+    include: {
+      product: { include: { supplier: true } },
+      _count: { select: { loadItems: true, returnItems: true, invoiceItems: true, ledgerEntries: true } }
+    },
+    orderBy: [{ expiryDate: "asc" as const }, { product: { name: "asc" as const } }]
+  };
+
+  const allMatchCount = await prisma.productBatch.count({ where: searchWhere });
+  const pageCount = getPageCount(allMatchCount);
+  const currentPage = Math.min(page, pageCount);
+  const needsGlobalFiltering = Boolean(tokens.length || state);
+  const matchingBatches = await prisma.productBatch.findMany({
+    ...batchQuery,
+    ...(needsGlobalFiltering ? {} : getPagination(currentPage))
+  });
+
+  const allBalances = await getWarehouseBalancesByBatchIds(
+    matchingBatches.map((batch) => batch.id),
+    allPostedMovementsDate
+  );
+  const stateFilteredBatches = matchingBatches.filter((batch) => {
+    const expired = toDateInputValue(batch.expiryDate) < toDateInputValue(today);
+    const expiring = !expired && toDateInputValue(batch.expiryDate) <= toDateInputValue(soon);
+    const balance = allBalances.get(batch.id) ?? 0;
+    return !state ||
+      (state === "available" && balance > 0 && !expired) ||
+      (state === "expiring" && balance > 0 && expiring) ||
+      (state === "expired" && balance > 0 && expired);
+  });
+  const totalBatches = state ? stateFilteredBatches.length : allMatchCount;
+  const filteredPageCount = getPageCount(totalBatches);
+  const visiblePage = Math.min(currentPage, filteredPageCount);
+  const pagination = getPagination(visiblePage);
+  const batches = needsGlobalFiltering
+    ? stateFilteredBatches.slice(pagination.skip, pagination.skip + pagination.take)
+    : stateFilteredBatches;
+
+  /*
+   * Search/state filtering happens before pagination so a matching batch on
+   * any page can be found. Balances are derived from the existing ledger;
+   * this only reads stock data and does not change inventory.
+   */
+  const currentPageBatches = batches;
+
+  const warehouseBalances = new Map(currentPageBatches.map((batch) => [batch.id, allBalances.get(batch.id) ?? 0]));
   const totalUnits = batches.reduce((sum, batch) => sum + (warehouseBalances.get(batch.id) ?? 0), 0);
   const rows = batches.map((batch) => ({
     id: batch.id,
@@ -58,14 +110,21 @@ export default async function StockPage({
           </div>
         }
       />
-      <StockTable rows={rows} today={toDateInputValue(today)} soon={toDateInputValue(soon)} />
+      <StockTable
+        rows={rows}
+        today={toDateInputValue(today)}
+        soon={toDateInputValue(soon)}
+        query={query}
+        state={state}
+      />
       <div className="mt-4">
         <PaginationControls
           pathname="/stock"
-          page={page}
-          pageCount={getPageCount(totalBatches)}
+          page={visiblePage}
+          pageCount={filteredPageCount}
           total={totalBatches}
           pageSize={DEFAULT_PAGE_SIZE}
+          params={{ q: query, state }}
         />
       </div>
     </>
