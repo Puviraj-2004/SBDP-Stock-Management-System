@@ -24,14 +24,23 @@ type StockRow = {
   movementCount: number;
 };
 
+type ProductSummary = {
+  productId: string;
+  productName: string;
+  supplierName: string;
+  receivedQuantity: number;
+};
+
 export function StockTable({
   rows,
+  productSummaries,
   today,
   soon,
   query: initialQuery,
   state: initialState
 }: {
   rows: StockRow[];
+  productSummaries: ProductSummary[];
   today: string;
   soon: string;
   query: string;
@@ -78,6 +87,23 @@ export function StockTable({
           <option value="expired">Expired with stock</option>
         </Select>
       </div>
+
+      {productSummaries.length > 0 ? (
+        <section className="rounded-md border border-line bg-white p-3" aria-live="polite">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Total Original Received</div>
+          <div className="grid gap-2">
+            {productSummaries.map((product) => (
+              <div key={product.productId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <div>
+                  <span className="font-medium">{product.productName}</span>
+                  <span className="ml-2 text-muted">{product.supplierName}</span>
+                </div>
+                <span className="font-semibold tabular-nums">{product.receivedQuantity}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <Table headers={["Product", "Supplier", "Barcode", "Original received", "Warehouse balance", "Cost", "Received date", "Expiry", "State", "Actions"]}>
         {rows.map((row) => {

@@ -93,6 +93,7 @@ export const invoiceSchema = z.object({
       invoiceItemId: z.string().min(1).optional(),
       batchId: z.string().min(1),
       quantity: positiveInt,
+      freeQuantity: nonNegativeInt.default(0),
       discountType: z.enum(["none", "amount", "percentage"]).default("none"),
       discountValue: z.coerce.number().min(0).default(0)
     })

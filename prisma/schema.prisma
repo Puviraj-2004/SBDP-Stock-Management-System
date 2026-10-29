@@ -226,6 +226,7 @@ model InvoiceItem {
   batchId   String
   batch     ProductBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
   quantity  Int
+  freeQuantity Int @default(0)
   unitPrice     Decimal      @db.Decimal(12, 2)
   discountType  DiscountType @default(none)
   discountValue Decimal      @default(0) @db.Decimal(12, 2)

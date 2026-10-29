@@ -93,7 +93,7 @@ async function EditSaleInvoiceForm({
   for (const item of invoice.items) {
     const existing = rowsByBatch.get(item.batchId);
     if (existing) {
-      existing.balance += item.quantity;
+      existing.balance += item.quantity + item.freeQuantity;
     } else {
       rowsByBatch.set(item.batchId, {
         productId: item.productId,
@@ -105,7 +105,7 @@ async function EditSaleInvoiceForm({
         itemCode: item.batch.product.itemCode,
         sellingPrice: item.batch.product.sellingPrice,
         expiryDate: item.batch.expiryDate,
-        balance: item.quantity
+        balance: item.quantity + item.freeQuantity
       });
     }
   }
@@ -134,6 +134,7 @@ async function EditSaleInvoiceForm({
         unitPrice: Number(item.unitPrice),
         batchId: item.batchId,
         quantity: item.quantity,
+        freeQuantity: item.freeQuantity,
         discountType: item.discountType,
         discountValue: Number(item.discountValue)
       }))}

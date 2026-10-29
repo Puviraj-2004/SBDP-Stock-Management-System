@@ -29,6 +29,10 @@ export async function GET() {
         invoice.invoiceType === "opening" ? "Old invoice" : invoice.vehicle?.nameOrNumber ?? "-",
         invoice.items.map((item) => item.product.name).join(", "),
         invoice.items.length,
+        invoice.items.map((item) => `${item.product.name}: paid ${item.quantity}, free ${item.freeQuantity}, delivered ${item.quantity + item.freeQuantity}`).join("; "),
+        invoice.items.reduce((sum, item) => sum + item.quantity, 0),
+        invoice.items.reduce((sum, item) => sum + item.freeQuantity, 0),
+        invoice.items.reduce((sum, item) => sum + item.quantity + item.freeQuantity, 0),
         subtotal,
         invoiceDiscount,
         total,
@@ -42,7 +46,7 @@ export async function GET() {
   return workbookResponse("invoices-export.xlsx", [
     {
       name: "Invoices",
-      columns: ["Invoice Date", "Shop", "Source", "Products", "Items", "Subtotal", "Invoice Discount", "Total", "Paid", "Remaining", "Paid Status"],
+      columns: ["Invoice Date", "Shop", "Source", "Products", "Items", "Item Quantities", "Paid Units", "Free Units", "Total Units Issued", "Subtotal", "Invoice Discount", "Total", "Paid", "Remaining", "Paid Status"],
       rows
     }
   ]);

@@ -114,12 +114,19 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
       .reduce((sum, invoice) => sum + invoice.items
         .filter((item) => matchesSupplier(item.product.supplierId))
         .reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+    const free = saleInvoices
+      .filter((invoice) => invoice.vehicleId === vehicleId)
+      .reduce((sum, invoice) => sum + invoice.items
+        .filter((item) => matchesSupplier(item.product.supplierId))
+        .reduce((itemSum, item) => itemSum + item.freeQuantity, 0), 0);
 
     return {
       vehicleId,
       vehicle: vehicleNameById.get(vehicleId) ?? "Unknown vehicle",
       loaded,
       sold,
+      free,
+      issued: sold + free,
       returned,
       currentBalance: currentBalanceByVehicle.get(vehicleId) ?? 0
     };
@@ -140,7 +147,7 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
     : openingInvoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount), 0);
   const profit = saleInvoices.reduce((sum, invoice) => {
     return sum + getInvoiceItemRevenues(invoice).filter(({ item }) => matchesSupplier(item.product.supplierId)).reduce((itemSum, { item, revenue }) => {
-      const cost = Number(item.batch.costPrice) * item.quantity;
+      const cost = Number(item.batch.costPrice) * (item.quantity + item.freeQuantity);
       return itemSum + revenue - cost;
     }, 0);
   }, 0);
@@ -149,6 +156,8 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
     product: string;
     loaded: number;
     sold: number;
+    free: number;
+    issued: number;
     returned: number;
     revenue: number;
     profit: number;
@@ -162,6 +171,8 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
       product: `${product.name} ${product.measurement}`,
       loaded: 0,
       sold: 0,
+      free: 0,
+      issued: 0,
       returned: 0,
       revenue: 0,
       profit: 0
@@ -185,8 +196,10 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
   for (const invoice of saleInvoices) {
     for (const { item, revenue } of getInvoiceItemRevenues(invoice).filter(({ item }) => matchesSupplier(item.product.supplierId))) {
       const row = productRow(item.product);
-      const cost = Number(item.batch.costPrice) * item.quantity;
+      const cost = Number(item.batch.costPrice) * (item.quantity + item.freeQuantity);
       row.sold += item.quantity;
+      row.free += item.freeQuantity;
+      row.issued += item.quantity + item.freeQuantity;
       row.revenue += revenue;
       row.profit += revenue - cost;
     }
@@ -245,7 +258,7 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
     hasActivity,
     vehicleRows,
     productRows: Array.from(productMap.values())
-      .filter((row) => row.loaded > 0 || row.sold > 0 || row.returned > 0)
+      .filter((row) => row.loaded > 0 || row.sold > 0 || row.free > 0 || row.returned > 0)
       .sort((a, b) => b.revenue - a.revenue || b.sold - a.sold || a.product.localeCompare(b.product)),
     invoices: invoiceRows,
     payments: paymentRows,
@@ -257,6 +270,8 @@ export async function getDailyProgressForSupplier(date?: string, supplierId?: st
       loadedUnits: vehicleRows.reduce((sum, row) => sum + row.loaded, 0),
       loadedVehicles: vehicleRows.filter((row) => row.loaded > 0).length,
       soldUnits: vehicleRows.reduce((sum, row) => sum + row.sold, 0),
+      freeUnits: vehicleRows.reduce((sum, row) => sum + row.free, 0),
+      issuedUnits: vehicleRows.reduce((sum, row) => sum + row.issued, 0),
       returnedUnits: vehicleRows.reduce((sum, row) => sum + row.returned, 0),
       pendingChequeValue: pendingCheques.reduce((sum, payment) => sum + Number(payment.amount), 0),
       invoiceCount: supplierSaleInvoiceRows.length,

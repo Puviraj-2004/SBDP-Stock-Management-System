@@ -64,13 +64,15 @@ export default async function DailyReportPage({
         <>
           <div className="report-summary-grid">
             <SummaryCard icon={<Receipt size={20} />} label="Sales revenue" value={money(report.totals.sales)} note={`${report.totals.invoiceCount} sale invoices`} />
-            <SummaryCard icon={<TrendingUp size={20} />} label="Gross profit" value={money(report.totals.profit)} note="selling price - batch cost" />
+            <SummaryCard icon={<TrendingUp size={20} />} label="Gross profit" value={money(report.totals.profit)} note="billable revenue less cost of all units issued" />
             {!report.isSupplierFiltered ? (
               <SummaryCard icon={<Receipt size={20} />} label="Old balance added" value={money(report.totals.openingBalanceAdded)} note={`${report.totals.oldInvoiceCount} old invoices`} />
             ) : null}
             <SummaryCard icon={<Banknote size={20} />} label="Payments received" value={money(report.totals.paymentsReceived)} note={report.isSupplierFiltered ? "overall payments" : "cash, bank, cleared cheques"} />
             <SummaryCard icon={<Truck size={20} />} label="Units loaded" value={report.totals.loadedUnits} note={`across ${report.totals.loadedVehicles} vehicles`} />
-            <SummaryCard icon={<PackageCheck size={20} />} label="Units sold" value={report.totals.soldUnits} note="from invoices today" />
+            <SummaryCard icon={<PackageCheck size={20} />} label="Paid units" value={report.totals.soldUnits} note="billable quantity in invoices" />
+            <SummaryCard icon={<PackageCheck size={20} />} label="Free units" value={report.totals.freeUnits} note="issued free of charge" />
+            <SummaryCard icon={<PackageCheck size={20} />} label="Total units issued" value={report.totals.issuedUnits} note="paid + free units delivered" />
             <SummaryCard icon={<RotateCcw size={20} />} label="Units returned" value={report.totals.returnedUnits} note="back to warehouse" />
             <SummaryCard icon={<Banknote size={20} />} label="New pending cheques" value={money(report.totals.pendingChequeValue)} note="not realized yet" />
           </div>
@@ -86,7 +88,9 @@ export default async function DailyReportPage({
                     <tr>
                       <th>Product</th>
                       <th className="right">Loaded</th>
-                      <th className="right">Sold</th>
+                      <th className="right">Paid units</th>
+                      <th className="right">Free units</th>
+                      <th className="right">Total issued</th>
                       <th className="right">Returned</th>
                       <th className="right">Revenue</th>
                       <th className="right">Profit</th>
@@ -98,6 +102,8 @@ export default async function DailyReportPage({
                         <td><Link href={`/products/${product.productId}`} className="report-cell-link strong">{product.product}</Link></td>
                         <td className="right">{product.loaded}</td>
                         <td className="right">{product.sold}</td>
+                        <td className="right">{product.free}</td>
+                        <td className="right">{product.issued}</td>
                         <td className={`right ${product.returned > 0 ? "danger-text" : ""}`}>{product.returned}</td>
                         <td className="right strong">{money(product.revenue)}</td>
                         <td className="right">{money(product.profit)}</td>
@@ -119,7 +125,9 @@ export default async function DailyReportPage({
                   <tr>
                     <th>Vehicle</th>
                     <th className="right">Loaded today</th>
-                    <th className="right">Sold today</th>
+                    <th className="right">Paid units</th>
+                    <th className="right">Free units</th>
+                    <th className="right">Total issued</th>
                     <th className="right">Returned today</th>
                     <th className="right">Current balance</th>
                     <th>Action</th>
@@ -131,6 +139,8 @@ export default async function DailyReportPage({
                       <td className="strong">{row.vehicle}</td>
                       <td className="right">{row.loaded}</td>
                       <td className="right">{row.sold}</td>
+                      <td className="right">{row.free}</td>
+                      <td className="right">{row.issued}</td>
                       <td className={`right ${row.returned > 0 ? "danger-text" : ""}`}>{row.returned}</td>
                       <td className="right strong">{row.currentBalance}</td>
                       <td>

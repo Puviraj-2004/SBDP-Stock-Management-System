@@ -34,6 +34,7 @@ type InvoiceItemDraft = {
   unitPrice?: number;
   batchId: string;
   quantity: number;
+  freeQuantity: number;
   discountType: DiscountType;
   discountValue: number;
 };
@@ -92,6 +93,7 @@ export function VehicleInvoiceForm({
   const [productSearch, setProductSearch] = useState("");
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [freeQuantity, setFreeQuantity] = useState(0);
   const [discountType, setDiscountType] = useState<DiscountType>("none");
   const [discountValue, setDiscountValue] = useState(0);
   const [items, setItems] = useState<InvoiceItemDraft[]>(initialItems);
@@ -104,7 +106,7 @@ export function VehicleInvoiceForm({
 
   const usedByBatch = useMemo(() => {
     const map = new Map<string, number>();
-    for (const item of items) map.set(item.batchId, (map.get(item.batchId) ?? 0) + item.quantity);
+    for (const item of items) map.set(item.batchId, (map.get(item.batchId) ?? 0) + item.quantity + item.freeQuantity);
     return map;
   }, [items]);
 
@@ -131,6 +133,14 @@ export function VehicleInvoiceForm({
   });
   const selectedRow = stockRows.find((row) => row.batchId === selectedBatchId);
   const selectedAvailable = selectedRow ? selectedRow.balance - (usedByBatch.get(selectedRow.batchId) ?? 0) : 0;
+  const invalidInvoiceItems = items.some((item) => {
+    const row = stockRows.find((entry) => entry.batchId === item.batchId);
+    const otherDraftQuantity = (usedByBatch.get(item.batchId) ?? 0) - item.quantity - item.freeQuantity;
+    const availableForItem = (row?.balance ?? 0) - otherDraftQuantity;
+    return !Number.isInteger(item.quantity) || item.quantity <= 0 ||
+      !Number.isInteger(item.freeQuantity) || item.freeQuantity < 0 ||
+      item.quantity + item.freeQuantity > availableForItem;
+  });
   const normalizedDiscountValue = discountType === "none" ? 0 : Math.max(0, discountValue);
   const discountInvalid = Boolean(
     selectedRow &&
@@ -171,7 +181,14 @@ export function VehicleInvoiceForm({
   }
 
   function addItem() {
-    if (!selectedBatchId || quantity <= 0 || quantity > selectedAvailable || discountInvalid) return;
+    const totalStockRequired = quantity + freeQuantity;
+    if (
+      !selectedBatchId ||
+      !Number.isInteger(quantity) || quantity <= 0 ||
+      !Number.isInteger(freeQuantity) || freeQuantity < 0 ||
+      totalStockRequired > selectedAvailable ||
+      discountInvalid
+    ) return;
     setItems((current) => {
       const existing = current.find((item) =>
         !item.invoiceItemId &&
@@ -182,20 +199,36 @@ export function VehicleInvoiceForm({
       );
       if (existing) {
         return current.map((item) =>
-          item === existing ? { ...item, quantity: item.quantity + quantity } : item
+          item === existing
+            ? { ...item, quantity: item.quantity + quantity, freeQuantity: item.freeQuantity + freeQuantity }
+            : item
         );
       }
-      return [...current, { batchId: selectedBatchId, unitPrice: selectedRow?.sellingPrice, quantity, discountType, discountValue: normalizedDiscountValue }];
+      return [...current, {
+        batchId: selectedBatchId,
+        unitPrice: selectedRow?.sellingPrice,
+        quantity,
+        freeQuantity,
+        discountType,
+        discountValue: normalizedDiscountValue
+      }];
     });
     setSelectedBatchId("");
     setScanCode("");
     setQuantity(1);
+    setFreeQuantity(0);
     setDiscountType("none");
     setDiscountValue(0);
   }
 
   function removeItem(index: number) {
     setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function updateItemQuantity(index: number, field: "quantity" | "freeQuantity", value: number) {
+    setItems((current) => current.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, [field]: value } : item
+    ));
   }
 
   return (
@@ -247,7 +280,7 @@ export function VehicleInvoiceForm({
             onValueChange={setScanCode}
             onCommit={selectByCode}
           />
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_140px]">
             <div className="grid gap-1.5 text-sm font-medium text-ink">
               <span>Product</span>
               <div
@@ -317,9 +350,26 @@ export function VehicleInvoiceForm({
               <Input
                 type="number"
                 min="1"
+                step="1"
                 max={selectedAvailable || undefined}
                 value={quantity}
                 onChange={(event) => setQuantity(Number(event.target.value))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addItem();
+                  }
+                }}
+              />
+            </Field>
+            <Field label="Free Quantity">
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                max={Math.max(0, selectedAvailable - quantity)}
+                value={freeQuantity}
+                onChange={(event) => setFreeQuantity(Number(event.target.value))}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
@@ -355,10 +405,22 @@ export function VehicleInvoiceForm({
             <div className="flex items-end">
               <div className="min-h-10 w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-muted">
                 Line total: <span className="font-semibold text-ink tabular">{linePreview.toFixed(2)}</span>
+                {selectedBatchId ? <span className="ml-3">Stock required: {quantity + freeQuantity} / {selectedAvailable}</span> : null}
               </div>
             </div>
             <div className="flex items-end">
-              <Button type="button" onClick={addItem} className="w-full" disabled={!selectedBatchId || quantity > selectedAvailable || discountInvalid}>Add</Button>
+              <Button
+                type="button"
+                onClick={addItem}
+                className="w-full"
+                disabled={
+                  !selectedBatchId ||
+                  !Number.isInteger(quantity) || quantity <= 0 ||
+                  !Number.isInteger(freeQuantity) || freeQuantity < 0 ||
+                  quantity + freeQuantity > selectedAvailable ||
+                  discountInvalid
+                }
+              >Add</Button>
             </div>
           </div>
         </div>
@@ -387,11 +449,12 @@ export function VehicleInvoiceForm({
             <input type="hidden" name={`batch-${index}`} value={item.batchId} />
             {item.invoiceItemId ? <input type="hidden" name={`invoiceItemId-${index}`} value={item.invoiceItemId} /> : null}
             <input type="hidden" name={`quantity-${index}`} value={item.quantity} />
+            <input type="hidden" name={`freeQuantity-${index}`} value={item.freeQuantity} />
             <input type="hidden" name={`discountType-${index}`} value={item.discountType} />
             <input type="hidden" name={`discountValue-${index}`} value={item.discountValue} />
           </div>
         ))}
-        <Table headers={["Product", "Qty", "Unit price", "Discount", "Line total", "Action"]}>
+        <Table headers={["Product", "Paid Qty", "Free Qty", "Unit price", "Discount", "Line total", "Action"]}>
           {items.map((item, index) => {
             const row = stockRows.find((entry) => entry.batchId === item.batchId);
             const unitPrice = item.unitPrice ?? row?.sellingPrice ?? 0;
@@ -402,7 +465,32 @@ export function VehicleInvoiceForm({
                   <div className="font-medium">{row?.productName} {row?.measurement}</div>
                   <div className="text-xs text-muted">{row?.supplierName} - exp {row?.expiryLabel}</div>
                 </td>
-                <td className="px-3 py-2 tabular">{item.quantity}</td>
+                <td className="px-3 py-2 tabular">
+                  {mode === "edit" ? (
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      max={Math.max(1, (row?.balance ?? 0) - ((usedByBatch.get(item.batchId) ?? 0) - item.quantity - item.freeQuantity) - item.freeQuantity)}
+                      value={item.quantity}
+                      aria-label={`Paid quantity for ${row?.productName ?? "invoice item"}`}
+                      onChange={(event) => updateItemQuantity(index, "quantity", Number(event.target.value))}
+                    />
+                  ) : item.quantity}
+                </td>
+                <td className="px-3 py-2 tabular">
+                  {mode === "edit" ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      max={Math.max(0, (row?.balance ?? 0) - ((usedByBatch.get(item.batchId) ?? 0) - item.quantity - item.freeQuantity) - item.quantity)}
+                      value={item.freeQuantity}
+                      aria-label={`Free quantity for ${row?.productName ?? "invoice item"}`}
+                      onChange={(event) => updateItemQuantity(index, "freeQuantity", Number(event.target.value))}
+                    />
+                  ) : item.freeQuantity}
+                </td>
                 <td className="px-3 py-2 tabular">LKR {unitPrice.toFixed(2)}</td>
                 <td className="px-3 py-2 tabular">{discountLabel(item.discountType, item.discountValue)}</td>
                 <td className="px-3 py-2 tabular">{lineTotal.toFixed(2)}</td>
@@ -423,7 +511,7 @@ export function VehicleInvoiceForm({
             );
           })}
           <tr className="bg-[#ebe7dd] font-semibold">
-            <td className="px-3 py-2" colSpan={4}>Subtotal</td>
+            <td className="px-3 py-2" colSpan={5}>Subtotal</td>
             <td className="px-3 py-2 tabular">{subtotal.toFixed(2)}</td>
             <td className="px-3 py-2" />
           </tr>
@@ -475,7 +563,7 @@ export function VehicleInvoiceForm({
           {actionState.message}
         </div>
       ) : null}
-      <Button type="submit" disabled={items.length === 0 || invoiceDiscountInvalid || isPending}>
+      <Button type="submit" disabled={items.length === 0 || invalidInvoiceItems || invoiceDiscountInvalid || isPending}>
         {isPending ? "Saving..." : mode === "create" ? "Create invoice" : "Save invoice"}
       </Button>
     </form>

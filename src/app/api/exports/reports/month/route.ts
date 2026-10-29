@@ -25,20 +25,22 @@ export async function GET(request: Request) {
         ...(!report.isSupplierFiltered ? [["Old Balance Added", money(report.totals.openingBalanceAdded), `${report.comparisons.openingBalanceAdded.toFixed(1)}%`]] : []),
         ["Payments Collected", money(report.totals.paymentsReceived), `${report.comparisons.paymentsReceived.toFixed(1)}%`],
         ["Outstanding Change", money(report.totals.outstandingChange), `${report.comparisons.outstandingChange.toFixed(1)}%`],
-        ["Units Sold", report.totals.soldUnits, `${report.comparisons.soldUnits.toFixed(1)}%`],
+        ["Paid Units", report.totals.soldUnits, `${report.comparisons.soldUnits.toFixed(1)}%`],
+        ["Free Units", report.totals.freeUnits, `${report.comparisons.freeUnits.toFixed(1)}%`],
+        ["Total Units Issued", report.totals.issuedUnits, `${report.comparisons.issuedUnits.toFixed(1)}%`],
         ["Units Loaded", report.totals.loadedUnits, `${report.comparisons.loadedUnits.toFixed(1)}%`],
         ["Units Returned", report.totals.returnedUnits, `${report.comparisons.returnedUnits.toFixed(1)}%`]
       ]
     },
     {
       name: "Vehicles",
-      columns: ["Vehicle", "Loaded", "Sold", "Returned", "Sell-through %"],
-      rows: report.vehicleRows.map((vehicle) => [vehicle.vehicle, vehicle.loaded, vehicle.sold, vehicle.returned, `${vehicle.sellThrough.toFixed(1)}%`])
+      columns: ["Vehicle", "Loaded", "Paid Units", "Free Units", "Total Units Issued", "Returned", "Paid Sell-through %"],
+      rows: report.vehicleRows.map((vehicle) => [vehicle.vehicle, vehicle.loaded, vehicle.sold, vehicle.free, vehicle.issued, vehicle.returned, `${vehicle.sellThrough.toFixed(1)}%`])
     },
     {
       name: "Top Products",
-      columns: ["Product", "Supplier", "Units Sold", "Revenue", "Profit"],
-      rows: report.productRows.map((product) => [product.product, product.supplier, product.unitsSold, product.revenue, product.profit])
+      columns: ["Product", "Supplier", "Paid Units", "Free Units", "Total Units Issued", "Revenue", "Profit"],
+      rows: report.productRows.map((product) => [product.product, product.supplier, product.unitsSold, product.unitsFree, product.unitsIssued, product.revenue, product.profit])
     },
     {
       name: "Top Shops",

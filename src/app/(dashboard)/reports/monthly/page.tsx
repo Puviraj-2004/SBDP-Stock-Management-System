@@ -85,7 +85,9 @@ export default async function MonthlyReportPage({
         ) : null}
         <SummaryCard icon={<Banknote size={20} />} label={report.isSupplierFiltered ? "Payments collected overall" : "Payments collected"} value={money(report.totals.paymentsReceived)} comparison={report.comparisons.paymentsReceived} />
         <SummaryCard icon={<Banknote size={20} />} label="Outstanding change" value={money(report.totals.outstandingChange)} comparison={report.comparisons.outstandingChange} favorableWhenDown />
-        <SummaryCard icon={<PackageCheck size={20} />} label="Units sold" value={report.totals.soldUnits} comparison={report.comparisons.soldUnits} />
+        <SummaryCard icon={<PackageCheck size={20} />} label="Paid units" value={report.totals.soldUnits} comparison={report.comparisons.soldUnits} />
+        <SummaryCard icon={<PackageCheck size={20} />} label="Free units" value={report.totals.freeUnits} comparison={report.comparisons.freeUnits} />
+        <SummaryCard icon={<PackageCheck size={20} />} label="Total units issued" value={report.totals.issuedUnits} comparison={report.comparisons.issuedUnits} />
         <SummaryCard icon={<Truck size={20} />} label="Units loaded" value={report.totals.loadedUnits} comparison={report.comparisons.loadedUnits} />
         <SummaryCard icon={<RotateCcw size={20} />} label="Units returned" value={report.totals.returnedUnits} comparison={report.comparisons.returnedUnits} favorableWhenDown />
       </div>
@@ -98,9 +100,11 @@ export default async function MonthlyReportPage({
               <tr>
                 <th>Vehicle</th>
                 <th className="right">Loaded</th>
-                <th className="right">Sold</th>
+                <th className="right">Paid units</th>
+                <th className="right">Free units</th>
+                <th className="right">Total issued</th>
                 <th className="right">Returned</th>
-                <th className="right">Sell-through %</th>
+                <th className="right">Paid sell-through %</th>
               </tr>
             </thead>
             <tbody>
@@ -109,6 +113,8 @@ export default async function MonthlyReportPage({
                   <td className="strong">{vehicle.vehicle}</td>
                   <td className="right">{vehicle.loaded}</td>
                   <td className="right">{vehicle.sold}</td>
+                  <td className="right">{vehicle.free}</td>
+                  <td className="right">{vehicle.issued}</td>
                   <td className={`right ${vehicle.returned > 0 ? "danger-text" : ""}`}>{vehicle.returned}</td>
                   <td className="right strong">{vehicle.sellThrough.toFixed(1)}%</td>
                 </tr>
@@ -126,7 +132,9 @@ export default async function MonthlyReportPage({
               <tr>
                 <th>Product</th>
                 <th>Supplier</th>
-                <th className="right">Units sold</th>
+                <th className="right">Paid units</th>
+                <th className="right">Free units</th>
+                <th className="right">Total issued</th>
                 <th className="right">Revenue</th>
                 <th className="right">Profit</th>
               </tr>
@@ -137,6 +145,8 @@ export default async function MonthlyReportPage({
                   <td><Link href={`/products/${product.productId}`} className="report-cell-link strong">{product.product}</Link></td>
                   <td>{product.supplier}</td>
                   <td className="right">{product.unitsSold}</td>
+                  <td className="right">{product.unitsFree}</td>
+                  <td className="right">{product.unitsIssued}</td>
                   <td className="right strong">{money(product.revenue)}</td>
                   <td className="right">{money(product.profit)}</td>
                 </tr>

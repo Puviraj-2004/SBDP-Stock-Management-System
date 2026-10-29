@@ -106,14 +106,18 @@ async function monthCore(month: string, supplierId?: string) {
   const soldUnits = saleInvoices.reduce((sum, invoice) => sum + invoice.items
     .filter((item) => matchesSupplier(item.product.supplierId))
     .reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+  const freeUnits = saleInvoices.reduce((sum, invoice) => sum + invoice.items
+    .filter((item) => matchesSupplier(item.product.supplierId))
+    .reduce((itemSum, item) => itemSum + item.freeQuantity, 0), 0);
+  const issuedUnits = soldUnits + freeUnits;
   const profit = saleInvoices.reduce((sum, invoice) => {
     return sum + getInvoiceItemRevenues(invoice).filter(({ item }) => matchesSupplier(item.product.supplierId)).reduce((itemSum, { item, revenue }) => {
-      const cost = Number(item.batch.costPrice) * item.quantity;
+      const cost = Number(item.batch.costPrice) * (item.quantity + item.freeQuantity);
       return itemSum + revenue - cost;
     }, 0);
   }, 0);
 
-  return { selected, start, end, invoices, saleInvoices, payments, loads, returns, totals: { sales, openingBalanceAdded, paymentsReceived, loadedUnits, returnedUnits, soldUnits, profit } };
+  return { selected, start, end, invoices, saleInvoices, payments, loads, returns, totals: { sales, openingBalanceAdded, paymentsReceived, loadedUnits, returnedUnits, soldUnits, freeUnits, issuedUnits, profit } };
 }
 
 export async function getMonthlyProgress(month?: string | null, supplierId?: string) {
@@ -135,8 +139,8 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
     outstandingAt(previousData.end)
   ]);
 
-  const vehicleMap = new Map<string, { vehicleId: string; vehicle: string; loaded: number; sold: number; returned: number }>();
-  const productMap = new Map<string, { productId: string; product: string; supplier: string; unitsSold: number; revenue: number; profit: number }>();
+  const vehicleMap = new Map<string, { vehicleId: string; vehicle: string; loaded: number; sold: number; free: number; issued: number; returned: number }>();
+  const productMap = new Map<string, { productId: string; product: string; supplier: string; unitsSold: number; unitsFree: number; unitsIssued: number; revenue: number; profit: number }>();
   const shopMap = new Map<string, { shopId: string; shop: string; invoiceTotal: number; paymentsReceived: number }>();
   const trendMap = new Map<string, number>();
 
@@ -145,7 +149,7 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
   }
 
   for (const load of current.loads) {
-    const row = vehicleMap.get(load.vehicleId) ?? { vehicleId: load.vehicleId, vehicle: load.vehicle.nameOrNumber, loaded: 0, sold: 0, returned: 0 };
+    const row = vehicleMap.get(load.vehicleId) ?? { vehicleId: load.vehicleId, vehicle: load.vehicle.nameOrNumber, loaded: 0, sold: 0, free: 0, issued: 0, returned: 0 };
     row.loaded += load.items
       .filter((item) => !effectiveSupplierId || item.batch.product.supplierId === effectiveSupplierId)
       .reduce((sum, item) => sum + item.quantityLoaded, 0);
@@ -153,7 +157,7 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
   }
 
   for (const vehicleReturn of current.returns) {
-    const row = vehicleMap.get(vehicleReturn.vehicleId) ?? { vehicleId: vehicleReturn.vehicleId, vehicle: vehicleReturn.vehicle.nameOrNumber, loaded: 0, sold: 0, returned: 0 };
+    const row = vehicleMap.get(vehicleReturn.vehicleId) ?? { vehicleId: vehicleReturn.vehicleId, vehicle: vehicleReturn.vehicle.nameOrNumber, loaded: 0, sold: 0, free: 0, issued: 0, returned: 0 };
     row.returned += vehicleReturn.items
       .filter((item) => !effectiveSupplierId || item.batch.product.supplierId === effectiveSupplierId)
       .reduce((sum, item) => sum + item.quantityReturned, 0);
@@ -174,8 +178,10 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
     shopMap.set(invoice.shopId, shop);
 
     if (invoice.vehicleId && invoice.vehicle) {
-      const vehicle = vehicleMap.get(invoice.vehicleId) ?? { vehicleId: invoice.vehicleId, vehicle: invoice.vehicle.nameOrNumber, loaded: 0, sold: 0, returned: 0 };
+      const vehicle = vehicleMap.get(invoice.vehicleId) ?? { vehicleId: invoice.vehicleId, vehicle: invoice.vehicle.nameOrNumber, loaded: 0, sold: 0, free: 0, issued: 0, returned: 0 };
       vehicle.sold += matchingItems.reduce((sum, row) => sum + row.item.quantity, 0);
+      vehicle.free += matchingItems.reduce((sum, row) => sum + row.item.freeQuantity, 0);
+      vehicle.issued += matchingItems.reduce((sum, row) => sum + row.item.quantity + row.item.freeQuantity, 0);
       vehicleMap.set(invoice.vehicleId, vehicle);
     }
 
@@ -185,11 +191,15 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
         product: `${item.product.name} ${item.product.measurement}`,
         supplier: item.product.supplier.name,
         unitsSold: 0,
+        unitsFree: 0,
+        unitsIssued: 0,
         revenue: 0,
         profit: 0
       };
-      const cost = Number(item.batch.costPrice) * item.quantity;
+      const cost = Number(item.batch.costPrice) * (item.quantity + item.freeQuantity);
       product.unitsSold += item.quantity;
+      product.unitsFree += item.freeQuantity;
+      product.unitsIssued += item.quantity + item.freeQuantity;
       product.revenue += revenue;
       product.profit += revenue - cost;
       productMap.set(item.productId, product);
@@ -213,7 +223,7 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
     supplier,
     isSupplierFiltered: Boolean(effectiveSupplierId),
     vehicleRows: Array.from(vehicleMap.values())
-      .filter((vehicle) => vehicle.loaded > 0 || vehicle.sold > 0 || vehicle.returned > 0)
+      .filter((vehicle) => vehicle.loaded > 0 || vehicle.sold > 0 || vehicle.free > 0 || vehicle.returned > 0)
       .map((vehicle) => ({
         ...vehicle,
         sellThrough: vehicle.loaded > 0 ? (vehicle.sold / vehicle.loaded) * 100 : 0
@@ -232,6 +242,8 @@ export async function getMonthlyProgressForSupplier(month?: string | null, suppl
       paymentsReceived: percentChange(current.totals.paymentsReceived, previousData.totals.paymentsReceived),
       outstandingChange: percentChange(outstandingChange, previousOutstandingChange),
       soldUnits: percentChange(current.totals.soldUnits, previousData.totals.soldUnits),
+      freeUnits: percentChange(current.totals.freeUnits, previousData.totals.freeUnits),
+      issuedUnits: percentChange(current.totals.issuedUnits, previousData.totals.issuedUnits),
       loadedUnits: percentChange(current.totals.loadedUnits, previousData.totals.loadedUnits),
       returnedUnits: percentChange(current.totals.returnedUnits, previousData.totals.returnedUnits),
       profit: percentChange(current.totals.profit, previousData.totals.profit)

@@ -1,0 +1,2 @@
+ALTER TABLE "InvoiceItem"
+ADD COLUMN "freeQuantity" INTEGER NOT NULL DEFAULT 0;

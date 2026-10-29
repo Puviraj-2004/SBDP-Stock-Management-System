@@ -114,29 +114,31 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </div>
           ) : (
             <>
-              <Table headers={["Product", "Supplier", "Qty", "Unit", "Discount", "Line total"]}>
+              <Table headers={["Product", "Supplier", "Paid Qty", "Free Qty", "Total delivered", "Unit", "Discount", "Line total"]}>
                 {invoice.items.map((item) => (
                   <tr key={item.id}>
                     <td className="px-3 py-2">{item.product.name} {item.product.measurement}</td>
                     <td className="px-3 py-2">{item.product.supplier.name}</td>
                     <td className="px-3 py-2 tabular">{item.quantity}</td>
+                    <td className="px-3 py-2 tabular">{item.freeQuantity}</td>
+                    <td className="px-3 py-2 tabular">{item.quantity + item.freeQuantity}</td>
                     <td className="px-3 py-2 tabular">{money(item.unitPrice)}</td>
                     <td className="px-3 py-2 tabular">{discountLabel(item.discountType, item.discountValue)}</td>
                     <td className="px-3 py-2 tabular">{money(item.lineTotal)}</td>
                   </tr>
                 ))}
                 <tr className="bg-[#ebe7dd] font-semibold">
-                  <td className="px-3 py-2" colSpan={5}>Subtotal</td>
+                  <td className="px-3 py-2" colSpan={7}>Subtotal</td>
                   <td className="px-3 py-2 tabular">{money(itemSubtotal)}</td>
                 </tr>
                 {invoiceDiscountAmount > 0 ? (
                   <tr className="bg-[#f5f2eb]">
-                    <td className="px-3 py-2" colSpan={5}>Invoice discount ({invoiceDiscountLabel(invoice.invoiceDiscountType, invoice.invoiceDiscountValue)})</td>
+                    <td className="px-3 py-2" colSpan={7}>Invoice discount ({invoiceDiscountLabel(invoice.invoiceDiscountType, invoice.invoiceDiscountValue)})</td>
                     <td className="px-3 py-2 tabular">-{money(invoiceDiscountAmount)}</td>
                   </tr>
                 ) : null}
                 <tr className="bg-[#ebe7dd] font-semibold">
-                  <td className="px-3 py-2" colSpan={5}>Total</td>
+                  <td className="px-3 py-2" colSpan={7}>Total</td>
                   <td className="px-3 py-2 tabular">{money(invoice.totalAmount)}</td>
                 </tr>
               </Table>

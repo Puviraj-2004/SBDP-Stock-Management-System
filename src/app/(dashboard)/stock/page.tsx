@@ -54,6 +54,30 @@ export default async function StockPage({
     ...(needsGlobalFiltering ? {} : getPagination(currentPage))
   });
 
+  const productSummaries = tokens.length
+    ? await (async () => {
+        const products = new Map(matchingBatches.map((batch) => [batch.productId, {
+          productName: `${batch.product.name} ${batch.product.measurement}`,
+          supplierName: batch.product.supplier.name
+        }]));
+        const productIds = Array.from(products.keys());
+        if (productIds.length === 0) return [];
+
+        const totals = await prisma.productBatch.groupBy({
+          by: ["productId"],
+          where: { productId: { in: productIds } },
+          _sum: { receivedQuantity: true }
+        });
+        const totalByProductId = new Map(totals.map((row) => [row.productId, row._sum.receivedQuantity ?? 0]));
+
+        return Array.from(products, ([productId, product]) => ({
+          productId,
+          ...product,
+          receivedQuantity: totalByProductId.get(productId) ?? 0
+        })).sort((a, b) => a.productName.localeCompare(b.productName) || a.supplierName.localeCompare(b.supplierName));
+      })()
+    : [];
+
   const allBalances = await getWarehouseBalancesByBatchIds(
     matchingBatches.map((batch) => batch.id),
     allPostedMovementsDate
@@ -112,6 +136,7 @@ export default async function StockPage({
       />
       <StockTable
         rows={rows}
+        productSummaries={productSummaries}
         today={toDateInputValue(today)}
         soon={toDateInputValue(soon)}
         query={query}

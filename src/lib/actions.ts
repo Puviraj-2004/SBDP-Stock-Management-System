@@ -61,22 +61,35 @@ function getInvoiceItemsFromForm(formData: FormData) {
         invoiceItemId: formData.has(`invoiceItemId-${index}`) ? String(formData.get(`invoiceItemId-${index}`)) : undefined,
         batchId: String(formData.get(`batch-${index}`) ?? ""),
         quantity: Number(formData.get(`quantity-${index}`) ?? 0),
+        freeQuantity: Number(formData.get(`freeQuantity-${index}`) ?? 0),
         discountType: String(formData.get(`discountType-${index}`) ?? "none"),
         discountValue: Number(formData.get(`discountValue-${index}`) ?? 0)
       };
     })
-    .filter((row): row is { index: number; invoiceItemId: string | undefined; batchId: string; quantity: number; discountType: string; discountValue: number } => Boolean(row))
+    .filter((row): row is { index: number; invoiceItemId: string | undefined; batchId: string; quantity: number; freeQuantity: number; discountType: string; discountValue: number } => Boolean(row))
     .sort((a, b) => a.index - b.index)
-    .map(({ invoiceItemId, batchId, quantity, discountType, discountValue }) => ({
+    .map(({ invoiceItemId, batchId, quantity, freeQuantity, discountType, discountValue }) => ({
       invoiceItemId,
       batchId,
       quantity,
+      freeQuantity,
       discountType,
       discountValue
     }))
     .filter((row) => row.batchId && row.quantity > 0);
 
   return rows;
+}
+
+function getRequiredPhysicalQuantityByBatch(items: { batchId: string; quantity: number; freeQuantity: number }[]) {
+  const requiredByBatch = new Map<string, number>();
+  for (const item of items) {
+    requiredByBatch.set(
+      item.batchId,
+      (requiredByBatch.get(item.batchId) ?? 0) + item.quantity + item.freeQuantity
+    );
+  }
+  return requiredByBatch;
 }
 
 function normalizedDiscountType(value: string) {
@@ -759,12 +772,12 @@ export async function createInvoiceAction(formData: FormData) {
     });
     const batchById = new Map(batches.map((batch) => [batch.id, batch]));
 
-    for (const item of data.items) {
-      const batch = batchById.get(item.batchId);
+    for (const [batchId, requiredQuantity] of getRequiredPhysicalQuantityByBatch(data.items)) {
+      const batch = batchById.get(batchId);
       if (!batch) throw new Error("Selected batch was not found");
-      const available = await getInvoiceVehicleBatchAvailable(tx, data.vehicleId, item.batchId, invoiceDate);
-      if (item.quantity > available) {
-        throw new Error(`Only ${available} items are available on vehicle for ${batch.product.name} ${batch.product.measurement} in the selected expiry batch`);
+      const available = await getInvoiceVehicleBatchAvailable(tx, data.vehicleId, batchId, invoiceDate);
+      if (requiredQuantity > available) {
+        throw new Error(`Only ${available} units are available on vehicle for ${batch.product.name} ${batch.product.measurement} in the selected expiry batch; ${requiredQuantity} are required including free quantity`);
       }
     }
 
@@ -820,6 +833,7 @@ export async function createInvoiceAction(formData: FormData) {
           productId: batch.productId,
           batchId: batch.id,
           quantity: item.quantity,
+          freeQuantity: item.freeQuantity,
           unitPrice,
           discountType,
           discountValue: new Prisma.Decimal(discountValue),
@@ -833,7 +847,7 @@ export async function createInvoiceAction(formData: FormData) {
           productId: batch.productId,
           batchId: batch.id,
           transactionType: "sale",
-          quantityChange: -item.quantity,
+          quantityChange: -(item.quantity + item.freeQuantity),
           transactionDate: invoiceDate,
           invoiceItemId: invoiceItem.id
         }
@@ -841,7 +855,7 @@ export async function createInvoiceAction(formData: FormData) {
     }
 
     return createdInvoice;
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
   revalidatePath("/invoices");
   revalidatePath(`/shops/${data.shopId}`);
@@ -942,12 +956,12 @@ export async function updateInvoiceAction(formData: FormData) {
     });
     const batchById = new Map(batches.map((batch) => [batch.id, batch]));
 
-    for (const item of data.items) {
-      const batch = batchById.get(item.batchId);
+    for (const [batchId, requiredQuantity] of getRequiredPhysicalQuantityByBatch(data.items)) {
+      const batch = batchById.get(batchId);
       if (!batch) throw new Error("Selected batch was not found");
-      const available = await getInvoiceVehicleBatchAvailable(tx, data.vehicleId, item.batchId, invoiceDate);
-      if (item.quantity > available) {
-        throw new Error(`Only ${available} items are available on vehicle for ${batch.product.name} ${batch.product.measurement} in the selected expiry batch`);
+      const available = await getInvoiceVehicleBatchAvailable(tx, data.vehicleId, batchId, invoiceDate);
+      if (requiredQuantity > available) {
+        throw new Error(`Only ${available} units are available on vehicle for ${batch.product.name} ${batch.product.measurement} in the selected expiry batch; ${requiredQuantity} are required including free quantity`);
       }
     }
 
@@ -1004,6 +1018,7 @@ export async function updateInvoiceAction(formData: FormData) {
           productId: batch.productId,
           batchId: batch.id,
           quantity: item.quantity,
+          freeQuantity: item.freeQuantity,
           unitPrice,
           discountType,
           discountValue: new Prisma.Decimal(discountValue),
@@ -1017,13 +1032,13 @@ export async function updateInvoiceAction(formData: FormData) {
           productId: batch.productId,
           batchId: batch.id,
           transactionType: "sale",
-          quantityChange: -item.quantity,
+          quantityChange: -(item.quantity + item.freeQuantity),
           transactionDate: invoiceDate,
           invoiceItemId: invoiceItem.id
         }
       });
     }
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);

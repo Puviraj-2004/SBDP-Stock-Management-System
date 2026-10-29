@@ -183,7 +183,7 @@ export default async function DashboardPage() {
         <SummaryCard
           title="Today movement"
           value={`${todayReport.totals.loadedUnits} units`}
-          note={`Sold ${todayReport.totals.soldUnits}, returned ${todayReport.totals.returnedUnits}`}
+          note={`Paid ${todayReport.totals.soldUnits}, free ${todayReport.totals.freeUnits}, issued ${todayReport.totals.issuedUnits}, returned ${todayReport.totals.returnedUnits}`}
           icon={<Truck size={18} />}
         />
         <SummaryCard
@@ -252,7 +252,7 @@ export default async function DashboardPage() {
             <LinkButton href="/operations/vehicle-stock" variant="secondary">Vehicle stock</LinkButton>
           </div>
           {todayReport.vehicleRows.length > 0 ? (
-            <Table headers={["Vehicle", "Loaded", "Sold", "Returned", "Current"]}>
+            <Table headers={["Vehicle", "Loaded", "Paid", "Free", "Issued", "Returned", "Current"]}>
               {todayReport.vehicleRows.map((row) => (
                 <tr key={row.vehicleId}>
                   <td className="px-3 py-2 font-medium">
@@ -262,6 +262,8 @@ export default async function DashboardPage() {
                   </td>
                   <td className="px-3 py-2 tabular">{row.loaded}</td>
                   <td className="px-3 py-2 tabular">{row.sold}</td>
+                  <td className="px-3 py-2 tabular">{row.free}</td>
+                  <td className="px-3 py-2 tabular">{row.issued}</td>
                   <td className="px-3 py-2 tabular">{row.returned}</td>
                   <td className="px-3 py-2 tabular">{row.currentBalance}</td>
                 </tr>

@@ -25,13 +25,20 @@ export async function GET(request: Request) {
         ["Summary", "Payments Received", money(report.totals.paymentsReceived)],
         ["Summary", "Units Loaded", report.totals.loadedUnits],
         ["Summary", "Vehicles Loaded", report.totals.loadedVehicles],
-        ["Summary", "Units Sold", report.totals.soldUnits],
+        ["Summary", "Paid Units", report.totals.soldUnits],
+        ["Summary", "Free Units", report.totals.freeUnits],
+        ["Summary", "Total Units Issued", report.totals.issuedUnits],
         ["Summary", "Units Returned", report.totals.returnedUnits],
         ["Summary", "New Pending Cheques", money(report.totals.pendingChequeValue)],
-        ...report.vehicleRows.map((row) => ["Vehicle", `${row.vehicle} loaded/sold/returned/balance`, `${row.loaded} / ${row.sold} / ${row.returned} / ${row.currentBalance}`]),
+        ...report.vehicleRows.map((row) => ["Vehicle", `${row.vehicle} loaded/paid/free/issued/returned/balance`, `${row.loaded} / ${row.sold} / ${row.free} / ${row.issued} / ${row.returned} / ${row.currentBalance}`]),
         ...report.invoices.map((invoice) => ["Invoice", `${invoice.shop} - ${invoice.vehicle}`, `${money(invoice.amount)} - ${invoice.status}`]),
         ...report.payments.map((payment) => ["Payment", `${payment.shop} - ${payment.method.replace("_", " ")}`, money(payment.amount)])
       ]
+    },
+    {
+      name: "Products",
+      columns: ["Product", "Paid Units", "Free Units", "Total Units Issued", "Revenue", "Profit"],
+      rows: report.productRows.map((product) => [product.product, product.sold, product.free, product.issued, product.revenue, product.profit])
     }
   ]);
 }
