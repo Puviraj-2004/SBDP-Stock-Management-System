@@ -238,12 +238,12 @@ async function getSafeWarehouseAvailableFromDate(
   });
 
   let balance = batch.receivedQuantity;
-  for (const movement of movements.filter((entry) => entry.transactionDate < fromDate)) {
+  for (const movement of movements.filter((entry) => entry.transactionDate <= fromDate)) {
     balance = applyWarehouseMovement(balance, movement);
   }
 
   let minimumBalance = balance;
-  for (const movement of movements.filter((entry) => entry.transactionDate >= fromDate)) {
+  for (const movement of movements.filter((entry) => entry.transactionDate > fromDate)) {
     balance = applyWarehouseMovement(balance, movement);
     minimumBalance = Math.min(minimumBalance, balance);
   }
@@ -264,12 +264,12 @@ async function getSafeVehicleBatchAvailableFromDate(
   });
 
   let balance = 0;
-  for (const movement of movements.filter((entry) => entry.transactionDate < fromDate)) {
+  for (const movement of movements.filter((entry) => entry.transactionDate <= fromDate)) {
     balance += movement.quantityChange;
   }
 
   let minimumBalance = balance;
-  for (const movement of movements.filter((entry) => entry.transactionDate >= fromDate)) {
+  for (const movement of movements.filter((entry) => entry.transactionDate > fromDate)) {
     balance += movement.quantityChange;
     minimumBalance = Math.min(minimumBalance, balance);
   }
