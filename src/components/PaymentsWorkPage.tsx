@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Banknote, Building2, FileText, Plus, X } from "lucide-react";
+import { BankSelect, getBankLogo } from "@/components/BankSelect";
 import { DatePickerInput } from "@/components/DatePickerInput";
 import { Badge, Button, Field, Input, Panel, Select, Table, TextArea } from "@/components/ui";
 import { clearChequeAction, createPaymentFormAction } from "@/lib/actions";
@@ -25,7 +26,9 @@ type PendingCheque = {
   id: string;
   paymentDate: string;
   shopName: string;
+  bankName?: string | null;
   chequeNumber: string;
+  chequeDate?: string | null;
   amount: string;
 };
 
@@ -35,6 +38,8 @@ type PaymentRow = {
   shopName: string;
   amount: string;
   method: "cash" | "bank_transfer" | "cheque";
+  bankName?: string | null;
+  chequeDate?: string | null;
   chequeStatus: "pending" | "cleared" | null;
   allocations: {
     id: string;
@@ -70,13 +75,24 @@ function PendingChequesSection({ rows }: { rows: PendingCheque[] }) {
         </div>
         <Badge tone="amber">{pendingRows.length}</Badge>
       </div>
-      <Table headers={["Date", "Shop", "Cheque number", "Amount", "Action"]}>
+      <Table headers={["Payment Date", "Shop", "Bank / Cheque", "Cheque Date", "Amount", "Action"]}>
         {pendingRows.map((payment) => (
           <tr key={payment.id}>
             <td className="px-3 py-2 tabular">{displayDate(payment.paymentDate)}</td>
-            <td className="px-3 py-2">{payment.shopName}</td>
-            <td className="px-3 py-2">{payment.chequeNumber}</td>
-            <td className="px-3 py-2 tabular">{money(payment.amount)}</td>
+            <td className="px-3 py-2 font-medium">{payment.shopName}</td>
+            <td className="px-3 py-2">
+              <div className="flex items-center gap-1.5">
+                {getBankLogo(payment.bankName)}
+                <span>{payment.bankName || "Cheque"}</span>
+                {payment.chequeNumber && payment.chequeNumber !== "-" ? (
+                  <span className="text-xs text-muted">{payment.chequeNumber}</span>
+                ) : null}
+              </div>
+            </td>
+            <td className="px-3 py-2 tabular text-sm">
+              {payment.chequeDate ? displayDate(payment.chequeDate) : "-"}
+            </td>
+            <td className="px-3 py-2 tabular font-semibold">{money(payment.amount)}</td>
             <td className="px-3 py-2">
               <form
                 action={(formData) => {
@@ -180,12 +196,22 @@ function AddPaymentDialog({
                 <option value="cheque">Cheque</option>
               </Select>
             </Field>
-            {method === "cheque" ? (
-              <Field label="Cheque number">
-                <Input name="chequeNumber" required />
+            {method === "bank_transfer" || method === "cheque" ? (
+              <Field label="Bank name">
+                <BankSelect name="bankName" />
               </Field>
             ) : null}
           </div>
+          {method === "cheque" ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field label="Cheque number">
+                <Input name="chequeNumber" required />
+              </Field>
+              <Field label="Cheque date">
+                <DatePickerInput name="chequeDate" />
+              </Field>
+            </div>
+          ) : null}
           {method === "cheque" ? <input type="hidden" name="chequeStatus" value="pending" /> : null}
           <Field label="Notes">
             <TextArea name="notes" />
@@ -288,9 +314,13 @@ export function PaymentsWorkPage({
             <td className="px-3 py-2">{payment.shopName}</td>
             <td className="px-3 py-2 tabular">{money(payment.amount)}</td>
             <td className="px-3 py-2">
-              <span className="inline-flex items-center gap-2">
-                <MethodIcon method={payment.method} />
-                {methodLabel(payment.method)}
+              <span className="inline-flex items-center gap-1.5">
+                {payment.bankName ? (
+                  getBankLogo(payment.bankName)
+                ) : (
+                  <MethodIcon method={payment.method} />
+                )}
+                <span>{payment.bankName || methodLabel(payment.method)}</span>
               </span>
             </td>
             <td className="px-3 py-2">
@@ -308,7 +338,16 @@ export function PaymentsWorkPage({
             </td>
             <td className="px-3 py-2">
               {payment.method === "cheque" ? (
-                <Badge tone={payment.chequeStatus === "cleared" ? "green" : "amber"}>{payment.chequeStatus === "cleared" ? "Cleared" : "Pending"}</Badge>
+                <div className="flex flex-col gap-0.5">
+                  <Badge tone={payment.chequeStatus === "cleared" ? "green" : "amber"}>
+                    {payment.chequeStatus === "cleared" ? "Cleared" : "Pending"}
+                  </Badge>
+                  {payment.chequeDate ? (
+                    <span className="text-[11px] text-muted">
+                      Due: {displayDate(payment.chequeDate)}
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
             </td>
           </tr>

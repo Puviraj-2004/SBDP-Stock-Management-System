@@ -244,7 +244,9 @@ model Payment {
   paymentDate  DateTime      @default(now()) @db.Date
   amount       Decimal       @db.Decimal(12, 2)
   method       PaymentMethod
+  bankName     String?
   chequeNumber String?
+  chequeDate   DateTime?     @db.Date
   chequeStatus ChequeStatus?
   notes        String?
   createdAt    DateTime      @default(now())

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#ED6B22"/>
+  <!-- Sampath Bank Sunburst / Wheel Icon -->
+  <circle cx="32" cy="32" r="20" stroke="#FFFFFF" stroke-width="4" fill="none"/>
+  <circle cx="32" cy="32" r="6" fill="#FFFFFF"/>
+  <path d="M32 12V52M12 32H52M18 18L46 46M18 46L46 18" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+</svg>

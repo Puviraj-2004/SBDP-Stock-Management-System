@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
+import { BankSelect, getBankLogo } from "@/components/BankSelect";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { DatePickerInput } from "@/components/DatePickerInput";
 import { Badge, Button, Field, Input, Panel, Select, Table, TextArea } from "@/components/ui";
@@ -16,7 +17,9 @@ type PaymentRow = {
     paymentDate: string;
     method: "cash" | "bank_transfer" | "cheque";
     amount: string;
-    chequeNumber: string;
+    bankName?: string | null;
+    chequeNumber?: string | null;
+    chequeDate?: string | null;
     chequeStatus: "pending" | "cleared" | "";
     notes: string;
   };
@@ -39,7 +42,8 @@ function PaymentFormPanel({
   editingPayment: EditingPayment;
   onCancelEdit: () => void;
 }) {
-  const formKey = editingPayment?.id ?? "new-payment";
+  const [submissionKey, setSubmissionKey] = useState(0);
+  const formKey = editingPayment ? `edit-${editingPayment.id}` : `new-payment-${submissionKey}`;
   const [actionState, formAction, isPending] = useActionState(
     editingPayment ? updatePaymentFormAction : createPaymentFormAction,
     {}
@@ -49,13 +53,33 @@ function PaymentFormPanel({
     () => ({
       paymentDate: editingPayment?.paymentDate ?? today,
       amount: editingPayment?.amount ?? remainingAmount,
-      method: editingPayment?.method ?? "cash",
+      method: (editingPayment?.method ?? "cash") as "cash" | "bank_transfer" | "cheque",
+      bankName: editingPayment?.bankName ?? "",
       chequeNumber: editingPayment?.chequeNumber ?? "",
+      chequeDate: editingPayment?.chequeDate ?? "",
       chequeStatus: editingPayment?.chequeStatus || "pending",
       notes: editingPayment?.notes ?? ""
     }),
     [editingPayment, remainingAmount, today]
   );
+
+  const [method, setMethod] = useState<"cash" | "bank_transfer" | "cheque">(defaults.method);
+  const [amount, setAmount] = useState<string>(defaults.amount);
+
+  useEffect(() => {
+    setMethod(defaults.method);
+  }, [defaults.method]);
+
+  useEffect(() => {
+    setAmount(defaults.amount);
+  }, [defaults.amount]);
+
+  useEffect(() => {
+    if (actionState.ok) {
+      setMethod("cash");
+      setSubmissionKey((k) => k + 1);
+    }
+  }, [actionState.ok]);
 
   return (
     <Panel>
@@ -82,24 +106,52 @@ function PaymentFormPanel({
           <DatePickerInput name="paymentDate" defaultValue={defaults.paymentDate} maxDate={today} required />
         </Field>
         <Field label="Amount">
-          <Input name="amount" type="number" min="0" step="0.01" defaultValue={defaults.amount} required />
+          <Input
+            name="amount"
+            type="number"
+            min="0"
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+          />
         </Field>
         <Field label="Method">
-          <Select name="method" defaultValue={defaults.method} required>
+          <Select
+            name="method"
+            value={method}
+            onChange={(e) => setMethod(e.target.value as "cash" | "bank_transfer" | "cheque")}
+            required
+          >
             <option value="cash">Cash</option>
             <option value="bank_transfer">Bank transfer</option>
             <option value="cheque">Cheque</option>
           </Select>
         </Field>
-        <Field label="Cheque number">
-          <Input name="chequeNumber" defaultValue={defaults.chequeNumber} />
-        </Field>
-        <Field label="Cheque status">
-          <Select name="chequeStatus" defaultValue={defaults.chequeStatus}>
-            <option value="pending">Pending</option>
-            <option value="cleared">Cleared</option>
-          </Select>
-        </Field>
+
+        {method === "bank_transfer" || method === "cheque" ? (
+          <Field label="Bank name">
+            <BankSelect name="bankName" defaultValue={defaults.bankName} />
+          </Field>
+        ) : null}
+
+        {method === "cheque" ? (
+          <>
+            <Field label="Cheque number">
+              <Input name="chequeNumber" defaultValue={defaults.chequeNumber} required />
+            </Field>
+            <Field label="Cheque date">
+              <DatePickerInput name="chequeDate" defaultValue={defaults.chequeDate} />
+            </Field>
+            <Field label="Cheque status">
+              <Select name="chequeStatus" defaultValue={defaults.chequeStatus}>
+                <option value="pending">Pending</option>
+                <option value="cleared">Cleared</option>
+              </Select>
+            </Field>
+          </>
+        ) : null}
+
         <Field label="Notes">
           <TextArea name="notes" defaultValue={defaults.notes} />
         </Field>
@@ -129,7 +181,7 @@ function LinkedPaymentsPanel({
           No payments recorded for this invoice.
         </div>
       ) : (
-        <Table headers={["Date", "Method", "Payment", "Applied", "Cheque", "Notes", "Actions"]}>
+        <Table headers={["Date", "Method", "Payment", "Applied", "Bank / Cheque", "Notes", "Actions"]}>
           {payments.map((row) => {
             const payment = row.payment;
             return (
@@ -139,7 +191,28 @@ function LinkedPaymentsPanel({
                 <td className="px-3 py-2 tabular">{money(payment.amount)}</td>
                 <td className="px-3 py-2 tabular">{money(row.appliedAmount)}</td>
                 <td className="px-3 py-2">
-                  {payment.method === "cheque" ? <Badge tone={payment.chequeStatus === "cleared" ? "green" : "amber"}>{payment.chequeStatus}</Badge> : "-"}
+                  {payment.method === "cheque" ? (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 font-medium text-xs">
+                        {getBankLogo(payment.bankName)}
+                        <span>{payment.bankName || "Cheque"}</span>
+                        {payment.chequeNumber ? <span className="text-muted">{payment.chequeNumber}</span> : null}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted">
+                        {payment.chequeDate ? <span>{displayDate(payment.chequeDate)}</span> : null}
+                        <Badge tone={payment.chequeStatus === "cleared" ? "green" : "amber"}>
+                          {payment.chequeStatus || "pending"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ) : payment.method === "bank_transfer" ? (
+                    <div className="flex items-center gap-1.5 font-medium text-xs">
+                      {getBankLogo(payment.bankName)}
+                      <span>{payment.bankName || "Bank transfer"}</span>
+                    </div>
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td className="px-3 py-2">{payment.notes || "-"}</td>
                 <td className="px-3 py-2">

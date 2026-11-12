@@ -142,7 +142,9 @@ export default async function PaymentsPage({
           id: payment.id,
           paymentDate: toDateInputValue(payment.paymentDate),
           shopName: payment.shop.name,
+          bankName: payment.bankName,
           chequeNumber: payment.chequeNumber ?? "-",
+          chequeDate: payment.chequeDate ? toDateInputValue(payment.chequeDate) : null,
           amount: String(payment.amount)
         }))}
         payments={payments.map((payment) => ({
@@ -151,6 +153,8 @@ export default async function PaymentsPage({
           shopName: payment.shop.name,
           amount: String(payment.amount),
           method: payment.method,
+          bankName: payment.bankName,
+          chequeDate: payment.chequeDate ? toDateInputValue(payment.chequeDate) : null,
           chequeStatus: payment.chequeStatus,
           allocations: payment.allocations.map((allocation) => {
             const paidBeforeThisAllocation = allocation.invoice.allocations

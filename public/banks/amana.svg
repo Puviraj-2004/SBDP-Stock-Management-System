@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#00843D"/>
+  <circle cx="32" cy="32" r="20" stroke="#FFFFFF" stroke-width="2.5" fill="none"/>
+  <!-- Crescent & Star -->
+  <path d="M34 18C26 18 20 24 20 32C20 40 26 46 34 46C29 44 26 38 26 32C26 26 29 20 34 18Z" fill="#FFFFFF"/>
+  <polygon points="38,28 40,33 45,33 41,36 43,41 38,38 34,41 36,36 32,33 37,33" fill="#FBBF24"/>
+</svg>

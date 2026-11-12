@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <circle cx="32" cy="32" r="30" fill="#FBBF24" stroke="#D97706" stroke-width="2"/>
+  <circle cx="32" cy="32" r="25" fill="#18181B"/>
+  <circle cx="32" cy="32" r="23" fill="#D97706"/>
+  <!-- Central Emblem / Rice Pinnacle -->
+  <path d="M32 14L36 24H28L32 14Z" fill="#FEF3C7"/>
+  <circle cx="32" cy="27" r="3.5" fill="#FEF3C7"/>
+  <path d="M25 35C25 31.5 28 29.5 32 29.5C36 29.5 39 31.5 39 35C39 39 32 44 32 44C32 44 25 39 25 35Z" fill="#FEF3C7"/>
+  <path d="M22 47H42V50H22V47Z" rx="1.5" fill="#18181B"/>
+  <text x="32" y="49.5" text-anchor="middle" fill="#FBBF24" font-size="3" font-weight="900" font-family="Arial, sans-serif" letter-spacing="0.5">BOC</text>
+</svg>

@@ -48,7 +48,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       paymentDate: toDateInputValue(allocation.payment.paymentDate),
       method: allocation.payment.method,
       amount: String(allocation.payment.amount),
+      bankName: allocation.payment.bankName ?? "",
       chequeNumber: allocation.payment.chequeNumber ?? "",
+      chequeDate: allocation.payment.chequeDate ? toDateInputValue(allocation.payment.chequeDate) : "",
       chequeStatus: (allocation.payment.chequeStatus === "pending" || allocation.payment.chequeStatus === "cleared" ? allocation.payment.chequeStatus : "") as "" | "pending" | "cleared",
       notes: allocation.payment.notes ?? ""
     }
@@ -64,7 +66,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         paymentDate: toDateInputValue(payment.paymentDate),
         method: payment.method,
         amount: String(payment.amount),
+        bankName: payment.bankName ?? "",
         chequeNumber: payment.chequeNumber ?? "",
+        chequeDate: payment.chequeDate ? toDateInputValue(payment.chequeDate) : "",
         chequeStatus: (payment.chequeStatus === "pending" || payment.chequeStatus === "cleared" ? payment.chequeStatus : "") as "" | "pending" | "cleared",
         notes: payment.notes ?? ""
       }

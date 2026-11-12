@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <circle cx="32" cy="32" r="30" fill="#EAB308" stroke="#CA8A04" stroke-width="2"/>
+  <circle cx="32" cy="32" r="24" fill="#0C2340"/>
+  <circle cx="32" cy="32" r="21" fill="#CA8A04"/>
+  <text x="32" y="39" text-anchor="middle" fill="#FFFFFF" font-size="20" font-weight="900" font-family="'Arial Black', Arial, sans-serif" letter-spacing="-1">PB</text>
+  <path d="M22 43H42" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+</svg>

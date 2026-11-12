@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#002D62"/>
+  <rect x="10" y="14" width="44" height="26" rx="4" fill="#FDB813"/>
+  <text x="32" y="33" text-anchor="middle" fill="#002D62" font-size="16" font-weight="900" font-family="'Arial Black', Arial, sans-serif" letter-spacing="1">HNB</text>
+  <rect x="14" y="44" width="36" height="5" rx="2.5" fill="#FDB813"/>
+</svg>

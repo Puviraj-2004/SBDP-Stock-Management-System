@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#C8102E"/>
+  <!-- Seylan Heart / Flame Icon -->
+  <path d="M32 16C23 11 15 17 15 26C15 35 32 48 32 48C32 48 49 35 49 26C49 17 41 11 32 16Z" fill="#FFFFFF"/>
+  <path d="M32 23C27 19 22 23 22 28C22 34 32 42 32 42C32 42 42 34 42 28C42 23 37 19 32 23Z" fill="#C8102E"/>
+</svg>

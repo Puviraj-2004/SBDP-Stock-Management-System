@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { BankSelect } from "@/components/BankSelect";
 import { DatePickerInput } from "@/components/DatePickerInput";
 import { createPaymentFormAction } from "@/lib/actions";
 import { Button, Field, Input, Select, Table, TextArea } from "@/components/ui";
@@ -27,6 +28,7 @@ export function ShopPaymentForm({
   invoices: InvoiceOption[];
 }) {
   const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState("cash");
   const [actionState, formAction, isPending] = useActionState(createPaymentFormAction, {});
 
   useEffect(() => {
@@ -43,21 +45,33 @@ export function ShopPaymentForm({
         <Input name="amount" type="number" min="0" step="0.01" defaultValue={defaultAmount} required />
       </Field>
       <Field label="Method">
-        <Select name="method" required>
+        <Select name="method" value={method} onChange={(e) => setMethod(e.target.value)} required>
           <option value="cash">Cash</option>
           <option value="bank_transfer">Bank transfer</option>
           <option value="cheque">Cheque</option>
         </Select>
       </Field>
-      <Field label="Cheque number">
-        <Input name="chequeNumber" />
-      </Field>
-      <Field label="Cheque status">
-        <Select name="chequeStatus">
-          <option value="pending">Pending</option>
-          <option value="cleared">Cleared</option>
-        </Select>
-      </Field>
+      {method === "bank_transfer" || method === "cheque" ? (
+        <Field label="Bank name">
+          <BankSelect name="bankName" />
+        </Field>
+      ) : null}
+      {method === "cheque" ? (
+        <>
+          <Field label="Cheque number">
+            <Input name="chequeNumber" required />
+          </Field>
+          <Field label="Cheque date">
+            <DatePickerInput name="chequeDate" />
+          </Field>
+          <Field label="Cheque status">
+            <Select name="chequeStatus">
+              <option value="pending">Pending</option>
+              <option value="cleared">Cleared</option>
+            </Select>
+          </Field>
+        </>
+      ) : null}
       <Field label="Notes">
         <TextArea name="notes" />
       </Field>

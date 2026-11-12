@@ -142,7 +142,9 @@ export const paymentSchema = z.object({
   paymentDate: dateText,
   amount: money,
   method: z.enum(["cash", "bank_transfer", "cheque"]),
+  bankName: optionalText,
   chequeNumber: optionalText,
+  chequeDate: optionalText,
   chequeStatus: z.enum(["pending", "cleared"]).nullable().optional(),
   notes: optionalText
 }).superRefine((value, ctx) => {

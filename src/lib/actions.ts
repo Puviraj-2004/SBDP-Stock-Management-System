@@ -1192,7 +1192,9 @@ export async function createPaymentAction(formData: FormData) {
         paymentDate: dateInputToDate(data.paymentDate),
         amount: new Prisma.Decimal(data.amount),
         method: data.method as PaymentMethod,
+        bankName: data.method !== "cash" ? data.bankName : null,
         chequeNumber: data.method === "cheque" ? data.chequeNumber : null,
+        chequeDate: data.method === "cheque" && data.chequeDate ? dateInputToDate(data.chequeDate) : null,
         chequeStatus: data.method === "cheque" ? data.chequeStatus ?? "pending" : null,
         notes: data.notes
       }
@@ -1240,7 +1242,9 @@ export async function updatePaymentAction(formData: FormData) {
         paymentDate: dateInputToDate(data.paymentDate),
         amount: new Prisma.Decimal(data.amount),
         method: data.method as PaymentMethod,
+        bankName: data.method !== "cash" ? data.bankName : null,
         chequeNumber: data.method === "cheque" ? data.chequeNumber : null,
+        chequeDate: data.method === "cheque" && data.chequeDate ? dateInputToDate(data.chequeDate) : null,
         chequeStatus: data.method === "cheque" ? data.chequeStatus ?? "pending" : null,
         notes: data.notes
       }
