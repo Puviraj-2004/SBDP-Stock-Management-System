@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { login, logout } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { refreshInvoicePaidStatus, getInvoicePaidAmount, paymentCountsTowardBalance } from "@/lib/balance";
-import { dateInputToDate, startOfToday } from "@/lib/dates";
+import { dateInputToDate, displayDate, startOfToday } from "@/lib/dates";
 import {
   batchSchema,
   invoiceSchema,
@@ -1295,7 +1295,96 @@ export async function clearChequeAction(formData: FormData) {
   revalidatePath(`/shops/${existing.shopId}`);
   revalidatePath("/invoices");
   revalidatePath("/payments");
+  revalidatePath("/");
   for (const invoiceId of affectedInvoiceIds) revalidatePath(`/invoices/${invoiceId}`);
+}
+
+export type ChequeSearchResult = {
+  id: string;
+  chequeNumber: string;
+  bankName: string | null;
+  shopId: string;
+  shopName: string;
+  amount: number;
+  paymentDate: string;
+  chequeDate: string | null;
+  chequeStatus: "pending" | "cleared" | null;
+  allocations: {
+    invoiceId: string;
+    label: string;
+  }[];
+};
+
+export async function searchChequesAction(query: string): Promise<ChequeSearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed || trimmed.length < 1) {
+    return [];
+  }
+
+  const num = Number(trimmed.replace(/,/g, ""));
+  const isNum = !isNaN(num) && num > 0;
+  const lower = trimmed.toLowerCase();
+  const isPendingQuery = lower === "pending";
+  const isClearedQuery = lower === "cleared";
+
+  const orConditions: Prisma.PaymentWhereInput[] = [
+    { chequeNumber: { contains: trimmed, mode: "insensitive" } },
+    { bankName: { contains: trimmed, mode: "insensitive" } },
+    { shop: { name: { contains: trimmed, mode: "insensitive" } } }
+  ];
+
+  if (isNum) {
+    orConditions.push({ amount: new Prisma.Decimal(num) });
+  }
+
+  if (isPendingQuery) {
+    orConditions.push({ chequeStatus: "pending" });
+  } else if (isClearedQuery) {
+    orConditions.push({ chequeStatus: "cleared" });
+  }
+
+  const cheques = await prisma.payment.findMany({
+    where: {
+      method: PaymentMethod.cheque,
+      OR: orConditions
+    },
+    include: {
+      shop: { select: { id: true, name: true } },
+      allocations: {
+        include: {
+          invoice: {
+            select: { id: true, invoiceType: true, invoiceDate: true, referenceNumber: true }
+          }
+        }
+      }
+    },
+    orderBy: [
+      { paymentDate: "desc" },
+      { createdAt: "desc" }
+    ],
+    take: 25
+  });
+
+  return cheques.map((c) => ({
+    id: c.id,
+    chequeNumber: c.chequeNumber ?? "-",
+    bankName: c.bankName,
+    shopId: c.shop.id,
+    shopName: c.shop.name,
+    amount: Number(c.amount),
+    paymentDate: c.paymentDate.toISOString(),
+    chequeDate: c.chequeDate ? c.chequeDate.toISOString() : null,
+    chequeStatus: c.chequeStatus,
+    allocations: c.allocations.map((a) => ({
+      invoiceId: a.invoiceId,
+      label:
+        a.invoice.invoiceType === "opening"
+          ? a.invoice.referenceNumber
+            ? `Old invoice ${a.invoice.referenceNumber}`
+            : `Old invoice ${displayDate(a.invoice.invoiceDate)}`
+          : `Invoice ${displayDate(a.invoice.invoiceDate)}`
+    }))
+  }));
 }
 
 export async function markInvoicePaidAction(formData: FormData) {

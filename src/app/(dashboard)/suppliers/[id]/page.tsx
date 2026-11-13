@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Boxes, CircleDollarSign } from "lucide-react";
+import { Banknote, Boxes } from "lucide-react";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { deleteSupplierAction } from "@/lib/actions";
 import { LinkButton, PageHeader, Panel, Table } from "@/components/ui";
@@ -83,7 +83,7 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
               <div className="mt-1 text-xs text-muted">Total supplier purchase value in stock</div>
             </div>
             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#eeebe4] text-accent">
-              <CircleDollarSign size={18} />
+              <Banknote size={18} />
             </div>
           </div>
         </Panel>

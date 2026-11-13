@@ -13,6 +13,7 @@ import {
 import { ChequeStatus, PaymentMethod, StockTransactionType } from "@prisma/client";
 import { Badge, EmptyState, LinkButton, PageHeader, Panel, Table } from "@/components/ui";
 import { DatabaseUsageCard } from "@/components/DatabaseUsageCard";
+import { DashboardChequeSearch } from "@/components/DashboardChequeSearch";
 import { ExpiryAlertList } from "@/components/ExpiryAlertList";
 import { countedPaymentWhere, getOutstandingBalancesByShop } from "@/lib/balance";
 import { prisma } from "@/lib/db";
@@ -221,6 +222,8 @@ export default async function DashboardPage() {
         />
         <DatabaseUsageCard usage={databaseUsage} />
       </div>
+
+      <DashboardChequeSearch />
 
       {pendingCheques.length > 0 ? (
         <Panel className="mb-5 border-amber-300 bg-amber-50">
