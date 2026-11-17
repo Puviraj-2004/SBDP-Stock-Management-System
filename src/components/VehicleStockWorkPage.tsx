@@ -2,11 +2,11 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PackagePlus, RotateCcw, Trash2 } from "lucide-react";
+import { PackagePlus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { BarcodeScanInput } from "@/components/BarcodeScanInput";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { DatePickerInput } from "@/components/DatePickerInput";
-import { Button, Field, Input, Select } from "@/components/ui";
+import { Badge, Button, Field, Input, Select } from "@/components/ui";
 import { createVehicleLoadFormAction, createVehicleReturnFormAction, deleteVehicleReturnAction } from "@/lib/actions";
 
 type VehicleOption = {
@@ -75,10 +75,32 @@ export function VehicleStockWorkPage({
   today: string;
 }) {
   const [dialog, setDialog] = useState<DialogMode>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
   const selectedVehicle = selectedVehicleId ? `/operations/vehicle-stock?vehicleId=${selectedVehicleId}` : "/operations/vehicle-stock";
 
+  useEffect(() => {
+    setSearchQuery("");
+  }, [selectedVehicleId]);
+
   const stockTotal = useMemo(() => stockRows.reduce((sum, row) => sum + row.balance, 0), [stockRows]);
+
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return stockRows;
+    return stockRows.filter((row) =>
+      row.productName.toLowerCase().includes(query) ||
+      row.measurement.toLowerCase().includes(query) ||
+      row.supplierName.toLowerCase().includes(query) ||
+      (row.barcode && row.barcode.toLowerCase().includes(query)) ||
+      (row.itemCode && row.itemCode.toLowerCase().includes(query))
+    );
+  }, [stockRows, searchQuery]);
+
+  const filteredTotal = useMemo(
+    () => filteredRows.reduce((sum, row) => sum + row.balance, 0),
+    [filteredRows]
+  );
 
   return (
     <div className="grid gap-5">
@@ -104,17 +126,74 @@ export function VehicleStockWorkPage({
       </section>
 
       <section className="grid gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase text-muted">Current stock</h2>
-          <div className="text-sm font-medium text-muted">{stockTotal} units</div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold uppercase text-muted">Current stock</h2>
+            {searchQuery.trim() ? (
+              <Badge tone="green">
+                {filteredRows.length} {filteredRows.length === 1 ? "batch" : "batches"}
+              </Badge>
+            ) : null}
+          </div>
+          <div className="text-sm font-medium text-muted">
+            {searchQuery.trim() ? (
+              <span>
+                <strong className="text-accent font-semibold">{filteredTotal.toLocaleString()} units</strong>{" "}
+                <span className="text-xs text-muted">(out of {stockTotal.toLocaleString()} total)</span>
+              </span>
+            ) : (
+              <span>{stockTotal.toLocaleString()} units</span>
+            )}
+          </div>
         </div>
+
+        {stockRows.length > 0 ? (
+          <div className="relative flex items-center">
+            <div className="pointer-events-none absolute left-3 flex items-center text-muted">
+              <Search size={15} />
+            </div>
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search product name, measurement, supplier, or barcode..."
+              className="pl-9 pr-8 text-sm"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-[#eeebe4] hover:text-ink transition"
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                <X size={14} />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {searchQuery.trim() && filteredRows.length > 0 ? (
+          <div className="flex items-center justify-between rounded-md border border-accent/20 bg-[#f4f7f6] px-3.5 py-2 text-sm">
+            <span className="text-muted">
+              Total units for &quot;<strong className="text-ink">{searchQuery.trim()}</strong>&quot; in this vehicle:
+            </span>
+            <span className="font-semibold text-accent text-base tabular">
+              {filteredTotal.toLocaleString()} units
+            </span>
+          </div>
+        ) : null}
+
         <div className="overflow-hidden rounded-md border border-line bg-white">
           {stockRows.length === 0 ? (
             <div className="p-4 text-sm text-muted">
               No stock in this vehicle. Load stock to start selling.
             </div>
+          ) : filteredRows.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted">
+              No products matching &quot;<strong className="text-ink">{searchQuery}</strong>&quot; found in {selectedVehicleName}.
+            </div>
           ) : (
-            stockRows.map((row) => (
+            filteredRows.map((row) => (
               <div key={row.batchId} className="grid gap-3 border-b border-line p-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_120px_210px] md:items-center">
                 <div>
                   <div className="font-semibold">{row.productName} {row.measurement}</div>
