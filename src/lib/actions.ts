@@ -14,6 +14,7 @@ import {
   openingInvoiceSchema,
   paymentSchema,
   productSchema,
+  salesRepSchema,
   shopSchema,
   supplierSchema,
   vehicleLoadSchema,
@@ -506,6 +507,104 @@ export async function deleteSupplierAction(formData: FormData) {
   redirect("/suppliers");
 }
 
+export async function createSalesRepAction(formData: FormData) {
+  const data = salesRepSchema.parse(Object.fromEntries(formData));
+  const assignedProductIds = formData.getAll("assignedProductIds").map(String).filter(Boolean);
+
+  const rep = await prisma.$transaction(async (tx) => {
+    const created = await tx.salesRep.create({
+      data: {
+        name: data.name,
+        supplierId: data.supplierId,
+        phone: data.phone,
+        notes: data.notes
+      }
+    });
+
+    if (assignedProductIds.length > 0) {
+      await tx.product.updateMany({
+        where: { id: { in: assignedProductIds }, supplierId: data.supplierId },
+        data: { repId: created.id }
+      });
+    }
+
+    return created;
+  });
+
+  revalidatePath("/sales-reps");
+  revalidatePath("/suppliers");
+  revalidatePath(`/suppliers/${data.supplierId}`);
+  revalidatePath("/products");
+  return { id: rep.id };
+}
+
+export async function updateSalesRepAction(formData: FormData) {
+  const id = String(formData.get("id"));
+  const data = salesRepSchema.parse(Object.fromEntries(formData));
+  const assignedProductIds = formData.getAll("assignedProductIds").map(String).filter(Boolean);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.salesRep.update({
+      where: { id },
+      data: {
+        name: data.name,
+        supplierId: data.supplierId,
+        phone: data.phone,
+        notes: data.notes
+      }
+    });
+
+    await tx.product.updateMany({
+      where: { repId: id, id: { notIn: assignedProductIds } },
+      data: { repId: null }
+    });
+
+    if (assignedProductIds.length > 0) {
+      await tx.product.updateMany({
+        where: { id: { in: assignedProductIds }, supplierId: data.supplierId },
+        data: { repId: id }
+      });
+    }
+  });
+
+  revalidatePath("/sales-reps");
+  revalidatePath("/suppliers");
+  revalidatePath(`/suppliers/${data.supplierId}`);
+  revalidatePath("/products");
+}
+
+export async function deleteSalesRepAction(formData: FormData) {
+  const id = String(formData.get("id"));
+  const rep = await prisma.salesRep.findUnique({ where: { id }, select: { supplierId: true } });
+  if (!rep) throw new Error("Sales rep not found");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.product.updateMany({
+      where: { repId: id },
+      data: { repId: null }
+    });
+    await tx.salesRep.delete({ where: { id } });
+  });
+
+  revalidatePath("/sales-reps");
+  revalidatePath("/suppliers");
+  revalidatePath(`/suppliers/${rep.supplierId}`);
+  revalidatePath("/products");
+}
+
+export async function updateProductRepInlineAction(productId: string, repId: string | null) {
+  const product = await prisma.product.update({
+    where: { id: productId },
+    data: { repId: repId || null },
+    select: { supplierId: true }
+  });
+  revalidatePath("/suppliers");
+  revalidatePath(`/suppliers/${product.supplierId}`);
+  revalidatePath("/products");
+  revalidatePath("/sales-reps");
+  return { ok: true };
+}
+
 export async function createVehicleAction(formData: FormData) {
   const data = vehicleSchema.parse(Object.fromEntries(formData));
   await prisma.vehicle.create({ data });
@@ -567,6 +666,7 @@ export async function createProductAction(formData: FormData) {
   const product = await prisma.product.create({
     data: {
       supplierId: data.supplierId,
+      repId: data.repId || null,
       name: data.name,
       measurement: data.measurement,
       barcode: data.barcode,
@@ -586,6 +686,7 @@ export async function updateProductAction(formData: FormData) {
     where: { id },
     data: {
       supplierId: data.supplierId,
+      repId: data.repId || null,
       name: data.name,
       measurement: data.measurement,
       barcode: data.barcode,

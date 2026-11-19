@@ -33,15 +33,19 @@ export default async function ProductsPage({
           ]
         }
       : undefined;
-  const [products, totalProducts, suppliers] = await Promise.all([
+  const [products, totalProducts, suppliers, salesReps] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { supplier: true, _count: { select: { invoiceItems: true } } },
+      include: { supplier: true, rep: true, _count: { select: { invoiceItems: true } } },
       orderBy: { name: "asc" },
       ...getPagination(page)
     }) as Promise<ProductListRow[]>,
     prisma.product.count({ where }),
-    prisma.supplier.findMany({ orderBy: { name: "asc" } })
+    prisma.supplier.findMany({ orderBy: { name: "asc" } }),
+    prisma.salesRep.findMany({
+      select: { id: true, name: true, supplierId: true },
+      orderBy: { name: "asc" }
+    })
   ]);
   const stockByProductId = await getCompanyStockByProductIds(products.map((product) => product.id));
   const productRows = products.map((product) => ({
@@ -56,7 +60,10 @@ export default async function ProductsPage({
         description="Products are unique by name, measurement, and supplier."
         action={
           <div className="flex flex-wrap gap-2">
-            <ProductCreateDialog suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))} />
+            <ProductCreateDialog
+              suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
+              salesReps={salesReps}
+            />
           </div>
         }
       />

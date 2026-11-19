@@ -15,6 +15,7 @@ import {
   Receipt,
   Settings,
   Store,
+  UserCheck,
   Wallet
 } from "lucide-react";
 import { clsx } from "clsx";
@@ -42,7 +43,8 @@ const mainGroups: NavGroup[] = [
       { href: "/suppliers", label: "Suppliers", icon: Building2 },
       { href: "/vehicles", label: "Vehicles", icon: CarFront },
       { href: "/products", label: "Products", icon: Package },
-      { href: "/shops", label: "Shops", icon: Store }
+      { href: "/shops", label: "Shops", icon: Store },
+      { href: "/sales-reps", label: "Sales Reps", icon: UserCheck }
     ]
   },
   {

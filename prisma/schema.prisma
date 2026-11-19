@@ -48,13 +48,30 @@ model Supplier {
   contactInfo String?
   createdAt   DateTime @default(now())
 
+  products  Product[]
+  salesReps SalesRep[]
+}
+
+model SalesRep {
+  id         String   @id @default(uuid())
+  name       String
+  phone      String?
+  notes      String?
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now())
+
   products Product[]
+
+  @@index([supplierId])
 }
 
 model Product {
   id           String   @id @default(uuid())
   supplierId   String
   supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  repId        String?
+  rep          SalesRep? @relation(fields: [repId], references: [id], onDelete: SetNull)
   name         String
   measurement  String
   barcode      String?
@@ -70,6 +87,7 @@ model Product {
   @@unique([name, measurement, supplierId])
   @@index([barcode, supplierId])
   @@index([itemCode, supplierId])
+  @@index([repId])
 }
 
 model ProductBatch {

@@ -1,10 +1,9 @@
 import { notFound } from "next/navigation";
-import { Banknote, Boxes } from "lucide-react";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { SupplierProductsView } from "@/components/SupplierProductsView";
 import { deleteSupplierAction } from "@/lib/actions";
-import { LinkButton, PageHeader, Panel, Table } from "@/components/ui";
+import { LinkButton, PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { money } from "@/lib/dates";
 import { getCompanyStockByProductIds } from "@/lib/stockLedger";
 
 export default async function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,8 +11,14 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
   const supplier = await prisma.supplier.findUnique({
     where: { id },
     include: {
+      salesReps: {
+        orderBy: { name: "asc" }
+      },
       products: {
         include: {
+          rep: {
+            select: { id: true, name: true }
+          },
           batches: {
             orderBy: [{ receivedDate: "desc" }, { createdAt: "desc" }]
           }
@@ -33,15 +38,21 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
     const totalCostValue = costPrice !== null ? stock * costPrice : 0;
 
     return {
-      ...product,
+      id: product.id,
+      name: product.name,
+      measurement: product.measurement,
+      barcode: product.barcode,
+      itemCode: product.itemCode,
+      sellingPrice: Number(product.sellingPrice),
+      mrp: product.mrp !== null ? Number(product.mrp) : null,
       stock,
       costPrice,
-      totalCostValue
+      totalCostValue,
+      repId: product.repId,
+      rep: product.rep,
+      supplierId: product.supplierId
     };
   });
-
-  const totalStockUnits = productRows.reduce((sum, p) => sum + p.stock, 0);
-  const totalStockCostValue = productRows.reduce((sum, p) => sum + p.totalCostValue, 0);
 
   return (
     <>
@@ -61,59 +72,15 @@ export default async function SupplierDetailPage({ params }: { params: Promise<{
         }
       />
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2">
-        <Panel>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-medium text-muted">Total Stock in Hand</h2>
-              <div className="mt-2 text-2xl font-semibold tabular">{totalStockUnits.toLocaleString()} units</div>
-              <div className="mt-1 text-xs text-muted">Across {productRows.length} registered products</div>
-            </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#eeebe4] text-accent">
-              <Boxes size={18} />
-            </div>
-          </div>
-        </Panel>
-
-        <Panel>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-medium text-muted">Total Stock Value (Cost)</h2>
-              <div className="mt-2 text-2xl font-semibold tabular text-accent">{money(totalStockCostValue)}</div>
-              <div className="mt-1 text-xs text-muted">Total supplier purchase value in stock</div>
-            </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#eeebe4] text-accent">
-              <Banknote size={18} />
-            </div>
-          </div>
-        </Panel>
-      </div>
-
-      <Table headers={["Product", "Measurement", "Barcode", "Cost price", "Selling", "MRP", "Stock", "Total value"]}>
-        {productRows.map((product) => (
-          <tr key={product.id}>
-            <td className="px-3 py-2 font-medium">{product.name}</td>
-            <td className="px-3 py-2">{product.measurement}</td>
-            <td className="px-3 py-2 tabular">{product.barcode ?? "-"}</td>
-            <td className="px-3 py-2 tabular">{product.costPrice !== null ? money(product.costPrice) : "-"}</td>
-            <td className="px-3 py-2 tabular">{money(product.sellingPrice)}</td>
-            <td className="px-3 py-2 tabular">{product.mrp ? money(product.mrp) : "-"}</td>
-            <td className="px-3 py-2 tabular font-medium">{product.stock}</td>
-            <td className="px-3 py-2 tabular font-semibold text-accent">
-              {product.costPrice !== null ? money(product.totalCostValue) : "-"}
-            </td>
-          </tr>
-        ))}
-        {productRows.length > 0 ? (
-          <tr className="border-t-2 border-line bg-[#f8f6f0] font-semibold text-ink">
-            <td className="px-3 py-3" colSpan={6}>
-              Grand Total ({productRows.length} products)
-            </td>
-            <td className="px-3 py-3 tabular">{totalStockUnits.toLocaleString()}</td>
-            <td className="px-3 py-3 tabular text-accent font-bold">{money(totalStockCostValue)}</td>
-          </tr>
-        ) : null}
-      </Table>
+      <SupplierProductsView
+        supplier={{
+          id: supplier.id,
+          name: supplier.name,
+          contactInfo: supplier.contactInfo
+        }}
+        salesReps={supplier.salesReps}
+        products={productRows}
+      />
     </>
   );
 }

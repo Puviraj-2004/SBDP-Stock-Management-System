@@ -35,6 +35,13 @@ export const supplierSchema = z.object({
   contactInfo: optionalText
 });
 
+export const salesRepSchema = z.object({
+  name: z.string().trim().min(1),
+  supplierId: z.string().min(1),
+  phone: optionalText,
+  notes: optionalText
+});
+
 export const vehicleSchema = z.object({
   nameOrNumber: z.string().trim().min(1)
 });
@@ -47,6 +54,7 @@ export const shopSchema = z.object({
 
 export const productSchema = z.object({
   supplierId: z.string().min(1),
+  repId: optionalText,
   name: z.string().trim().min(1),
   measurement: z.string().trim().min(1),
   barcode: optionalText,

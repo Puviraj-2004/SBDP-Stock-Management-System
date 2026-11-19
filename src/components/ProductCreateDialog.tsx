@@ -13,6 +13,12 @@ type SupplierOption = {
   name: string;
 };
 
+type SalesRepOption = {
+  id: string;
+  name: string;
+  supplierId: string;
+};
+
 type ExistingProduct = {
   id: string;
   name: string;
@@ -22,7 +28,13 @@ type ExistingProduct = {
   supplier: { name: string };
 };
 
-export function ProductCreateDialog({ suppliers }: { suppliers: SupplierOption[] }) {
+export function ProductCreateDialog({
+  suppliers,
+  salesReps = []
+}: {
+  suppliers: SupplierOption[];
+  salesReps?: SalesRepOption[];
+}) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
@@ -30,10 +42,13 @@ export function ProductCreateDialog({ suppliers }: { suppliers: SupplierOption[]
   const [error, setError] = useState("");
   const [barcode, setBarcode] = useState("");
   const [supplierId, setSupplierId] = useState("");
+  const [repId, setRepId] = useState("");
   const [matches, setMatches] = useState<ExistingProduct[]>([]);
   const [checking, setChecking] = useState(false);
   const [lookupError, setLookupError] = useState("");
   const duplicate = matches.some((product) => product.supplierId === supplierId);
+
+  const filteredReps = salesReps.filter((r) => r.supplierId === supplierId);
 
   useEffect(() => {
     if (!open || !barcode.trim()) {
@@ -96,6 +111,7 @@ export function ProductCreateDialog({ suppliers }: { suppliers: SupplierOption[]
       <Button type="button" onClick={() => {
         setBarcode("");
         setSupplierId("");
+        setRepId("");
         setMatches([]);
         setError("");
         setLookupError("");
@@ -137,9 +153,38 @@ export function ProductCreateDialog({ suppliers }: { suppliers: SupplierOption[]
               {lookupError ? <p role="alert" className="text-sm text-red-700">{lookupError}</p> : null}
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Supplier">
-                  <Select name="supplierId" value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>
+                  <Select
+                    name="supplierId"
+                    value={supplierId}
+                    onChange={(event) => {
+                      setSupplierId(event.target.value);
+                      setRepId("");
+                    }}
+                    required
+                  >
                     <option value="">Select supplier</option>
                     {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Sales Rep (Optional)">
+                  <Select
+                    name="repId"
+                    value={repId}
+                    onChange={(e) => setRepId(e.target.value)}
+                    disabled={!supplierId || filteredReps.length === 0}
+                  >
+                    <option value="">
+                      {!supplierId
+                        ? "Select a supplier first"
+                        : filteredReps.length === 0
+                        ? "No reps for this supplier"
+                        : "-- Select Rep (Optional) --"}
+                    </option>
+                    {filteredReps.map((rep) => (
+                      <option key={rep.id} value={rep.id}>
+                        {rep.name}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label="Selling price"><Input name="sellingPrice" type="number" min="0" step="0.01" required /></Field>

@@ -6,14 +6,17 @@ import { prisma } from "@/lib/db";
 
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [product, suppliers] = await Promise.all([
+  const [product, suppliers, salesReps] = await Promise.all([
     prisma.product.findUnique({
       where: { id },
       include: { _count: { select: { batches: true, invoiceItems: true } } }
     }),
-    prisma.supplier.findMany({ orderBy: { name: "asc" } })
+    prisma.supplier.findMany({ orderBy: { name: "asc" } }),
+    prisma.salesRep.findMany({ orderBy: { name: "asc" } })
   ]);
   if (!product) notFound();
+
+  const supplierReps = salesReps.filter((r) => r.supplierId === product.supplierId);
 
   return (
     <>
@@ -25,6 +28,16 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
             <Field label="Supplier">
               <Select name="supplierId" defaultValue={product.supplierId} required>
                 {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Sales Rep (Optional)">
+              <Select name="repId" defaultValue={product.repId ?? ""}>
+                <option value="">-- No Rep / Unassigned --</option>
+                {supplierReps.map((rep) => (
+                  <option key={rep.id} value={rep.id}>
+                    {rep.name}
+                  </option>
+                ))}
               </Select>
             </Field>
             <Field label="Selling price"><Input name="sellingPrice" type="number" min="0" step="0.01" defaultValue={String(product.sellingPrice)} required /></Field>
