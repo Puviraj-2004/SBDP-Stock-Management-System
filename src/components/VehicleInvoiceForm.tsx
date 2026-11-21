@@ -137,8 +137,9 @@ export function VehicleInvoiceForm({
     const row = stockRows.find((entry) => entry.batchId === item.batchId);
     const otherDraftQuantity = (usedByBatch.get(item.batchId) ?? 0) - item.quantity - item.freeQuantity;
     const availableForItem = (row?.balance ?? 0) - otherDraftQuantity;
-    return !Number.isInteger(item.quantity) || item.quantity <= 0 ||
+    return !Number.isInteger(item.quantity) || item.quantity < 0 ||
       !Number.isInteger(item.freeQuantity) || item.freeQuantity < 0 ||
+      item.quantity + item.freeQuantity <= 0 ||
       item.quantity + item.freeQuantity > availableForItem;
   });
   const normalizedDiscountValue = discountType === "none" ? 0 : Math.max(0, discountValue);
@@ -184,8 +185,9 @@ export function VehicleInvoiceForm({
     const totalStockRequired = quantity + freeQuantity;
     if (
       !selectedBatchId ||
-      !Number.isInteger(quantity) || quantity <= 0 ||
+      !Number.isInteger(quantity) || quantity < 0 ||
       !Number.isInteger(freeQuantity) || freeQuantity < 0 ||
+      totalStockRequired <= 0 ||
       totalStockRequired > selectedAvailable ||
       discountInvalid
     ) return;
@@ -349,7 +351,7 @@ export function VehicleInvoiceForm({
             <Field label="Quantity">
               <Input
                 type="number"
-                min="1"
+                min="0"
                 step="1"
                 max={selectedAvailable || undefined}
                 value={quantity}
@@ -415,8 +417,9 @@ export function VehicleInvoiceForm({
                 className="w-full"
                 disabled={
                   !selectedBatchId ||
-                  !Number.isInteger(quantity) || quantity <= 0 ||
+                  !Number.isInteger(quantity) || quantity < 0 ||
                   !Number.isInteger(freeQuantity) || freeQuantity < 0 ||
+                  quantity + freeQuantity <= 0 ||
                   quantity + freeQuantity > selectedAvailable ||
                   discountInvalid
                 }
@@ -469,9 +472,9 @@ export function VehicleInvoiceForm({
                   {mode === "edit" ? (
                     <Input
                       type="number"
-                      min="1"
+                      min="0"
                       step="1"
-                      max={Math.max(1, (row?.balance ?? 0) - ((usedByBatch.get(item.batchId) ?? 0) - item.quantity - item.freeQuantity) - item.freeQuantity)}
+                      max={Math.max(0, (row?.balance ?? 0) - ((usedByBatch.get(item.batchId) ?? 0) - item.quantity - item.freeQuantity) - item.freeQuantity)}
                       value={item.quantity}
                       aria-label={`Paid quantity for ${row?.productName ?? "invoice item"}`}
                       onChange={(event) => updateItemQuantity(index, "quantity", Number(event.target.value))}

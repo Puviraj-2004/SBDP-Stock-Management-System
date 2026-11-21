@@ -100,10 +100,18 @@ export const invoiceSchema = z.object({
     z.object({
       invoiceItemId: z.string().min(1).optional(),
       batchId: z.string().min(1),
-      quantity: positiveInt,
+      quantity: nonNegativeInt.default(0),
       freeQuantity: nonNegativeInt.default(0),
       discountType: z.enum(["none", "amount", "percentage"]).default("none"),
       discountValue: z.coerce.number().min(0).default(0)
+    }).superRefine((item, ctx) => {
+      if (item.quantity + item.freeQuantity <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["quantity"],
+          message: "At least one of quantity or free quantity must be greater than zero."
+        });
+      }
     })
   ).min(1)
 }).superRefine((value, ctx) => {
